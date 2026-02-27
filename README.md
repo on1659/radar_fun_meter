@@ -18,9 +18,15 @@ Flow Theory 기반으로 게임 밸런스를 자동 분석해줌.
 # 예제 게임 테스트
 node src/cli.js --game=example --runs=100
 
-# 파라미터 조정하면서 테스트
-node src/cli.js --game=example --runs=100 --config.initialSpeed=22
-node src/cli.js --game=example --runs=100 --config.initialSpeed=130
+# 타이밍 점프 테스트
+node src/cli.js --game=timing-jump --runs=100
+
+# 파라미터 조정하면서 비교
+node src/cli.js --game=timing-jump --runs=100 --config.initialSpeed=150
+node src/cli.js --game=timing-jump --runs=100 --config.initialSpeed=260
+
+# 모든 게임 한번에
+npm run test:all
 ```
 
 ## 새 게임 추가
@@ -43,14 +49,33 @@ class MyGame extends GameAdapter {
 module.exports = MyGame;
 ```
 
-3. 실행: `node src/cli.js --game=mygame --runs=100`
+3. `src/cli.js`의 GAMES 레지스트리에 등록
+4. 실행: `node src/cli.js --game=mygame --runs=100`
 
 ## 현재 지원 게임
 
-- `example` - 타이밍 점프 스타일 예제
-- `timing-jump` - Gamzaworld 타이밍 점프 (TODO)
-- `rhythm-tap` - Gamzaworld 리듬 탭 (TODO)
-- `stack-tower` - Gamzaworld 스택 타워 (TODO)
+| 게임 | 파일 | 봇 타입 |
+|------|------|---------|
+| `example` | `games/example/ExampleGame.js` | 랜덤 점프 |
+| `timing-jump` | `games/timing-jump/TimingJumpAdapter.js` | 랜덤 점프 |
+| `rhythm-tap` | `games/rhythm-tap/RhythmTapAdapter.js` | 자동 탭 (정확도 조절 가능) |
+| `stack-tower` | `games/stack-tower/StackTowerAdapter.js` | 위치 기반 드롭 |
+
+## 현재 진단 결과 (2026-02-28)
+
+```
+타이밍 점프: 😵 너무 어려움 (봇 중앙값 3.5초)
+  → initialSpeed=260이 랜덤봇에겐 과함
+  → 실제 사람은 더 오래 살지만 체감 검증 필요
+
+리듬 탭: 😴 너무 쉬움 (봇 타임아웃 100%)  
+  → 봇이 자동 탭이라 miss가 거의 없음
+  → 봇 정확도 낮추거나 miss 기준 강화 필요
+
+스택 타워: 😵 생존 시간 측정 부적합
+  → 레벨 기반 측정이 더 적합한 게임
+  → TODO: 레벨 어댑터 추가
+```
 
 ## 결과 예시
 
@@ -83,7 +108,13 @@ radar_fun_meter/
 │   └── bots/
 │       └── RandomBot.js  ← 랜덤 봇
 ├── games/
-│   └── example/
-│       └── ExampleGame.js
+│   ├── example/
+│   │   └── ExampleGame.js
+│   ├── timing-jump/
+│   │   └── TimingJumpAdapter.js
+│   ├── rhythm-tap/
+│   │   └── RhythmTapAdapter.js
+│   └── stack-tower/
+│       └── StackTowerAdapter.js
 └── README.md
 ```

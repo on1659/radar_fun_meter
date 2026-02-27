@@ -1,171 +1,107 @@
 /**
- * FunMeter - 범용 게임 재미 측정 엔진
- * Flow Theory 기반: 실력 vs 난이도 균형이 재미를 결정
+ * FunMeter - Flow Theory 기반 게임 재미 분석 엔진
+ *
+ * Flow Zone 판정 기준:
+ * - 생존 시간 분포로 난이도 균형 측정
+ * - 너무 빨리 죽음 (중앙값 < 5초) → 너무 어려움
+ * - 너무 오래 생존 (타임아웃 > 50%) → 너무 쉬움
+ * - 그 사이 → FLOW Zone
  */
-
 class FunMeter {
   constructor(options = {}) {
-    this.runs = options.runs || 100;        // 시뮬레이션 횟수
-    this.maxTicks = options.maxTicks || 3600; // 최대 프레임 (60fps * 60초)
-    this.ticksPerSecond = options.ticksPerSecond || 60;
+    this.ticksPerSecond = options.ticksPerSecond ?? 60;
+    this.maxSeconds = options.maxSeconds ?? 60;  // 이 이상 생존하면 "너무 쉬움"
+    this.flowMinMedian = options.flowMinMedian ?? 5;   // 중앙값 최소 (초)
+    this.flowMaxTimeout = options.flowMaxTimeout ?? 0.5; // 타임아웃 비율 최대
   }
 
   /**
-   * 메인 분석 실행
-   * @param {GameAdapter} gameAdapter - 게임 어댑터 인스턴스
-   * @param {Function} botStrategy - 봇 전략 함수 (game) => input
-   * @returns {Object} 분석 결과
+   * 게임을 N번 플레이하고 분석
+   * @param {GameAdapter} game
+   * @param {Bot} bot
+   * @param {number} runs
+   * @returns {object} 분석 결과
    */
-  analyze(gameAdapter, botStrategy) {
-    const results = [];
+  run(game, bot, runs = 100) {
+    const times = [];
+    const scores = [];
+    let timeouts = 0;
+    const maxTicks = this.maxSeconds * this.ticksPerSecond;
 
-    for (let run = 0; run < this.runs; run++) {
-      gameAdapter.reset();
-      const runData = this._playOneRun(gameAdapter, botStrategy);
-      results.push(runData);
-    }
+    for (let i = 0; i < runs; i++) {
+      game.reset();
+      let ticks = 0;
+      let timedOut = false;
 
-    return this._buildReport(gameAdapter.getName(), results);
-  }
-
-  /**
-   * 단일 게임 실행
-   */
-  _playOneRun(game, botStrategy) {
-    const scoreHistory = [];
-    const difficultyHistory = [];
-    let tick = 0;
-
-    while (game.isAlive() && tick < this.maxTicks) {
-      const input = botStrategy(game, tick);
-      game.update(input);
-      tick++;
-
-      if (tick % 10 === 0) { // 10프레임마다 샘플링
-        scoreHistory.push(game.getScore());
-        difficultyHistory.push(game.getDifficulty());
+      while (game.isAlive() && ticks < maxTicks) {
+        const input = bot.decide(game);
+        game.update(input);
+        ticks++;
       }
+
+      const elapsed = ticks / this.ticksPerSecond;
+      if (ticks >= maxTicks) {
+        timedOut = true;
+        timeouts++;
+      }
+
+      times.push(elapsed);
+      scores.push(game.getScore());
     }
 
-    const survivalSeconds = tick / this.ticksPerSecond;
-    const finalScore = game.getScore();
-    const peakDifficulty = Math.max(...difficultyHistory, 0);
-    const avgDifficulty = difficultyHistory.length > 0
-      ? difficultyHistory.reduce((a, b) => a + b, 0) / difficultyHistory.length
-      : 0;
-
-    return {
-      survivalSeconds,
-      finalScore,
-      peakDifficulty,
-      avgDifficulty,
-      scoreHistory,
-      difficultyHistory,
-      timedOut: tick >= this.maxTicks,
-    };
+    return this._analyze(game.getName(), times, scores, timeouts, runs);
   }
 
-  /**
-   * 분석 리포트 생성
-   */
-  _buildReport(gameName, results) {
-    const survivals = results.map(r => r.survivalSeconds);
-    const scores = results.map(r => r.finalScore);
-    const timeouts = results.filter(r => r.timedOut).length;
+  _analyze(name, times, scores, timeouts, runs) {
+    const sorted = [...times].sort((a, b) => a - b);
+    const mean = times.reduce((a, b) => a + b, 0) / times.length;
+    const median = sorted[Math.floor(sorted.length / 2)];
+    const min = sorted[0];
+    const max = sorted[sorted.length - 1];
+    const timeoutRate = timeouts / runs;
 
-    const avgSurvival = this._avg(survivals);
-    const medianSurvival = this._median(survivals);
-    const avgScore = this._avg(scores);
-    const maxScore = Math.max(...scores);
-    const timeoutRate = timeouts / results.length;
+    const sortedScores = [...scores].sort((a, b) => a - b);
+    const scoreMean = scores.reduce((a, b) => a + b, 0) / scores.length;
+    const scoreMax = sortedScores[sortedScores.length - 1];
 
     // Flow Zone 판정
-    const flowZone = this._calcFlowZone(avgSurvival, timeoutRate, results);
+    let zone, emoji, advice;
+    if (median < this.flowMinMedian) {
+      zone = 'TOO_HARD';
+      emoji = '😵';
+      advice = `너무 어려워. 초기 난이도를 낮춰봐. (중앙값 생존: ${median.toFixed(1)}초)`;
+    } else if (timeoutRate > this.flowMaxTimeout) {
+      zone = 'TOO_EASY';
+      emoji = '😴';
+      advice = `너무 쉬워. 난이도 상승 속도를 높여봐. (타임아웃: ${(timeoutRate*100).toFixed(0)}%)`;
+    } else {
+      zone = 'FLOW';
+      emoji = '✅';
+      advice = '균형 잘 잡혔어. 난이도 상승 곡선 유지하면 됨.';
+    }
 
-    return {
-      gameName,
-      runs: results.length,
-      survival: {
-        avg: Math.round(avgSurvival * 10) / 10,
-        median: Math.round(medianSurvival * 10) / 10,
-        min: Math.round(Math.min(...survivals) * 10) / 10,
-        max: Math.round(Math.max(...survivals) * 10) / 10,
-      },
-      score: {
-        avg: Math.round(avgScore),
-        max: Math.round(maxScore),
-      },
-      timeoutRate: Math.round(timeoutRate * 100) + '%',
-      flowZone,
-      verdict: flowZone.verdict,
-      suggestion: flowZone.suggestion,
-    };
+    return { name, times, scores, mean, median, min, max, timeoutRate, scoreMean, scoreMax, zone, emoji, advice, runs };
   }
 
   /**
-   * Flow Zone 계산
-   * - 봇이 너무 빨리 죽음 → 너무 어려움
-   * - 봇이 타임아웃까지 생존 → 너무 쉬움
-   * - 그 사이 → Flow (재밌을 가능성 높음)
+   * 결과를 보기 좋게 출력
    */
-  _calcFlowZone(avgSurvival, timeoutRate, results) {
-    const maxSeconds = this.maxTicks / this.ticksPerSecond;
-
-    // 타임아웃 비율 기준
-    if (timeoutRate > 0.5) {
-      return {
-        zone: 'TOO_EASY',
-        verdict: '😴 너무 쉬움',
-        suggestion: '난이도를 올려야 해. 초기 속도 증가 or 장애물 빈도 증가.',
-        score: 0.2,
-      };
-    }
-
-    if (avgSurvival < 5) {
-      return {
-        zone: 'TOO_HARD',
-        verdict: '😤 너무 어려움',
-        suggestion: '너무 빨리 죽어. 초기 속도 낮추거나 장애물 간격 늘려야 해.',
-        score: 0.2,
-      };
-    }
-
-    if (avgSurvival < 15) {
-      return {
-        zone: 'CHALLENGING',
-        verdict: '🔥 도전적 (약간 어려움)',
-        suggestion: '캐주얼 유저엔 어려울 수 있어. 초반 5초 정도 여유 구간 추가 고려.',
-        score: 0.7,
-      };
-    }
-
-    if (avgSurvival < 45) {
-      return {
-        zone: 'FLOW',
-        verdict: '✅ FLOW Zone! (재밌을 가능성 높음)',
-        suggestion: '균형 잘 잡혔어. 난이도 상승 곡선 유지하면 됨.',
-        score: 1.0,
-      };
-    }
-
-    return {
-      zone: 'TOO_EASY',
-      verdict: '😴 약간 쉬움',
-      suggestion: '오래 살아남네. 후반 난이도 상승 속도를 높여봐.',
-      score: 0.5,
-    };
-  }
-
-  _avg(arr) {
-    return arr.reduce((a, b) => a + b, 0) / arr.length;
-  }
-
-  _median(arr) {
-    const sorted = [...arr].sort((a, b) => a - b);
-    const mid = Math.floor(sorted.length / 2);
-    return sorted.length % 2 !== 0
-      ? sorted[mid]
-      : (sorted[mid - 1] + sorted[mid]) / 2;
+  print(result) {
+    const bar = '─'.repeat(40);
+    console.log(`\n📊 결과: ${result.name}`);
+    console.log(bar);
+    console.log(`생존 시간`);
+    console.log(`  평균:   ${result.mean.toFixed(1)}초`);
+    console.log(`  중앙값: ${result.median.toFixed(1)}초`);
+    console.log(`  최소:   ${result.min.toFixed(1)}초`);
+    console.log(`  최대:   ${result.max.toFixed(1)}초`);
+    console.log(`점수`);
+    console.log(`  평균:   ${Math.round(result.scoreMean)}`);
+    console.log(`  최고:   ${result.scoreMax}`);
+    console.log(`타임아웃: ${(result.timeoutRate * 100).toFixed(0)}%`);
+    console.log(bar);
+    console.log(`\n${result.emoji} ${result.zone === 'FLOW' ? 'FLOW Zone! (재밌을 가능성 높음)' : result.zone === 'TOO_HARD' ? '너무 어려움' : '너무 쉬움'}`);
+    console.log(`💡 ${result.advice}\n`);
   }
 }
 

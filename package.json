@@ -1,16 +1,16 @@
 {
   "name": "radar_fun_meter",
-  "version": "0.1.0",
-  "description": "범용 게임 재미 측정 도구 - Flow Theory 기반 자동 밸런스 분석",
-  "main": "src/index.js",
+  "version": "1.0.0",
+  "description": "Flow Theory 기반 게임 재미 측정 도구",
+  "main": "src/cli.js",
   "bin": {
-    "fun-meter": "./src/cli.js"
+    "funmeter": "./src/cli.js"
   },
   "scripts": {
-    "test": "node src/cli.js --game=example --runs=50",
-    "test:example": "node src/cli.js --game=example --runs=100"
-  },
-  "keywords": ["game", "testing", "fun", "flow", "balance"],
-  "author": "on1659",
-  "license": "MIT"
+    "test:example": "node src/cli.js --game=example --runs=100",
+    "test:timing-jump": "node src/cli.js --game=timing-jump --runs=100",
+    "test:rhythm-tap": "node src/cli.js --game=rhythm-tap --runs=100",
+    "test:stack-tower": "node src/cli.js --game=stack-tower --runs=100",
+    "test:all": "node src/cli.js --game=timing-jump --runs=100 && node src/cli.js --game=rhythm-tap --runs=100 && node src/cli.js --game=stack-tower --runs=100"
+  }
 }

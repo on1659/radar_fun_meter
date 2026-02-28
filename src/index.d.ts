@@ -83,6 +83,8 @@ export declare class GameAdapter {
   getName(): string;
   getTime(): number;
   getLevel(): number | null;
+  /** 현재 게임 상태를 [0, 1] 범위 숫자 배열로 반환 (선택 구현, 미구현 시 null) */
+  getStateVector(): number[] | null;
 }
 
 // ─── FunMeter ──────────────────────────────────────────────
@@ -303,4 +305,39 @@ export declare class SmartBot implements Bot {
   constructor(options?: SmartBotOptions);
   decide(game: GameAdapter): string | null;
   reset(): void;
+}
+
+// ─── MLBot ──────────────────────────────────────────────────
+
+export interface MLBotOptions {
+  actions?: (string | null)[];
+  buckets?: number;
+  alpha?: number;
+  gamma?: number;
+  epsilon?: number;
+  scoreScale?: number;
+}
+
+export interface MLBotTrainOptions {
+  epsilonStart?: number;
+  epsilonEnd?: number;
+  epsilonDecay?: number;
+  maxTicks?: number;
+  verbose?: boolean;
+}
+
+export declare class MLBot implements Bot {
+  actions: (string | null)[];
+  buckets: number;
+  alpha: number;
+  gamma: number;
+  epsilon: number;
+  scoreScale: number;
+
+  constructor(options?: MLBotOptions);
+  decide(game: GameAdapter): string | null;
+  reset(): void;
+  train(game: GameAdapter, episodes?: number, options?: MLBotTrainOptions): void;
+  save(filePath: string): this;
+  static load(filePath: string, options?: MLBotOptions): MLBot;
 }

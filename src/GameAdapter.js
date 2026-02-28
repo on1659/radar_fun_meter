@@ -35,6 +35,13 @@ class GameAdapter {
    * 구현하지 않으면 null → FunMeter가 레벨 통계 생략
    */
   getLevel() { return null; }
+
+  /**
+   * 현재 게임 상태를 [0, 1] 범위 숫자 배열로 반환 (선택 구현)
+   * 구현하지 않으면 MLBot이 [score/scoreScale, difficulty] 기본값 사용
+   * @returns {number[]|null}
+   */
+  getStateVector() { return null; }
 }
 
 module.exports = GameAdapter;

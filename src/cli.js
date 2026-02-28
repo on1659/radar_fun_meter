@@ -113,7 +113,7 @@ const GAMES = {
 };
 
 function parseArgs(argv) {
-  const args = { config: {}, opt: {} };
+  const args = { config: {}, opt: {}, ml: {} };
   for (const arg of argv.slice(2)) {
     const eqIdx = arg.indexOf('=');
     const key = eqIdx >= 0 ? arg.slice(0, eqIdx) : arg;
@@ -125,6 +125,8 @@ function parseArgs(argv) {
       args.config[name.slice(7)] = parsed;
     } else if (name.startsWith('opt.')) {
       args.opt[name.slice(4)] = parsed;
+    } else if (name.startsWith('ml.')) {
+      args.ml[name.slice(3)] = parsed;
     } else {
       args[name] = parsed;
     }
@@ -152,6 +154,16 @@ function makeBot(args, gameName) {
     return new SmartBot({
       hint: args.config.hint ?? 'auto',
       scoreWindow: args.config.scoreWindow ?? 60,
+    });
+  }
+  if (botType === 'ml') {
+    const MLBot = require('./bots/MLBot');
+    if (args.ml && args.ml.load) {
+      return MLBot.load(args.ml.load, { epsilon: args.ml.epsilon ?? 0.0 });
+    }
+    return new MLBot({
+      epsilon: args.ml?.epsilon ?? 0.3,
+      buckets: args.ml?.buckets ?? 10,
     });
   }
   // 게임별 기본 botOptions 적용 (명시적 인자가 우선)
@@ -287,6 +299,41 @@ async function main() {
   // --optimize 모드
   if (args.optimize) {
     return runOptimize(args, gameName, GameClass);
+  }
+
+  // ML 학습 모드
+  if (args.bot === 'ml' && args.ml && args.ml.train) {
+    const MLBot = require('./bots/MLBot');
+    const mlEpisodes = args.ml.episodes ?? 300;
+    const game = new GameClass(args.config);
+    const bot = new MLBot({
+      epsilon:    args.ml.epsilon ?? 0.3,
+      buckets:    args.ml.buckets ?? 10,
+    });
+
+    console.log(`🧠 MLBot 학습 시작 (${mlEpisodes} episodes)...`);
+    bot.train(game, mlEpisodes, { verbose: true });
+
+    if (args.ml.save) {
+      bot.save(args.ml.save);
+      console.log(`💾 모델 저장됨: ${args.ml.save}`);
+    }
+
+    // 학습 결과 검증
+    bot.epsilon = 0.0;
+    const gameFlowOptions2 = (DEFAULT_PARAMS[gameName] || {}).flowOptions || {};
+    const meter2 = new FunMeter({ ticksPerSecond: 60, maxSeconds: 60, ...gameFlowOptions2 });
+    const game2  = new GameClass(args.config);
+    console.log(`\n🎮 학습 결과 측정 (${runs}회)...`);
+    const result2 = meter2.run(game2, bot, runs, { verbose: runs >= 20 });
+    meter2.print(result2);
+    if (args.output) saveResult(args.output, result2);
+    return;
+  }
+
+  // --bot=ml (학습/로드 없음): 경고 후 무학습 측정
+  if (args.bot === 'ml' && args.ml && !args.ml.load) {
+    console.warn('⚠️  MLBot: 학습 없이 사용 중. --ml.train 또는 --ml.load 권장');
   }
 
   // 일반 실행 모드

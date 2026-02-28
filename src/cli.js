@@ -27,7 +27,7 @@ radar_fun_meter — Flow Theory 기반 게임 재미 측정 도구
                                     stack-tower, flappy-bird, heartbeat
   --runs=<n>              실행 횟수 (기본: 100)
   --bot=random|human      봇 종류 (기본: random)
-  --output=<파일.json>    결과를 JSON 파일로 저장
+  --output=<파일>         결과를 파일로 저장 (.json / .html / .md)
   --list-games            사용 가능한 게임 목록 출력
 
 봇 옵션:
@@ -52,6 +52,8 @@ radar_fun_meter — Flow Theory 기반 게임 재미 측정 도구
   funmeter --game=timing-jump --runs=100 --bot=human
   funmeter --game=timing-jump --optimize --opt.runs=50
   funmeter --game=example --runs=50 --output=result.json
+  funmeter --game=timing-jump --runs=50 --output=report.html
+  funmeter --game=stack-tower --runs=50 --output=report.md
 `);
   process.exit(0);
 }
@@ -75,9 +77,22 @@ function printListGames() {
 
 function saveResult(filePath, result) {
   const fs = require('fs');
-  const data = { ...result, generatedAt: new Date().toISOString() };
+  const path = require('path');
+  const ext = path.extname(filePath).toLowerCase();
+  let content;
+
+  if (ext === '.html') {
+    const { toHTML } = require('./reporters/htmlReporter');
+    content = toHTML(result);
+  } else if (ext === '.md' || ext === '.markdown') {
+    const { toMarkdown } = require('./reporters/mdReporter');
+    content = toMarkdown(result);
+  } else {
+    content = JSON.stringify({ ...result, generatedAt: new Date().toISOString() }, null, 2);
+  }
+
   try {
-    fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf8');
+    fs.writeFileSync(filePath, content, 'utf8');
     console.log(`💾 결과 저장됨: ${filePath}`);
   } catch (err) {
     console.error(`❌ 저장 실패 (${filePath}): ${err.message}`);

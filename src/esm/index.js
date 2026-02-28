@@ -3,6 +3,7 @@ const require = createRequire(import.meta.url);
 
 const {
   FunMeter,
+  generateSuggestions,
   GameAdapter,
   Optimizer,
   DEFAULT_PARAMS,
@@ -12,6 +13,7 @@ const {
 
 export {
   FunMeter,
+  generateSuggestions,
   GameAdapter,
   Optimizer,
   DEFAULT_PARAMS,

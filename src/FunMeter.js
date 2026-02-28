@@ -42,16 +42,29 @@ class FunMeter {
     const supportsLevel = typeof game.getLevel === 'function';
     const verbose = options.verbose ?? true;
 
+    const CURVE_BUCKETS = 20;
+    const sampleInterval = Math.max(1, Math.floor(maxTicks / CURVE_BUCKETS));
+    const allCurves = [];
+
     for (let i = 0; i < runs; i++) {
       game.reset();
       if (bot.reset) bot.reset(); // 봇 상태 초기화 (HumanLikeBot 등)
       let ticks = 0;
+      const curveSamples = [];
 
       while (game.isAlive() && ticks < maxTicks) {
+        if (ticks % sampleInterval === 0) {
+          curveSamples.push(game.getScore());
+        }
         const input = bot.decide(game);
         game.update(input);
         ticks++;
       }
+
+      // 마지막 점수로 빈 버킷 채우기 (게임이 일찍 종료된 경우)
+      const finalScore = game.getScore();
+      while (curveSamples.length < CURVE_BUCKETS) curveSamples.push(finalScore);
+      allCurves.push(curveSamples.slice(0, CURVE_BUCKETS));
 
       const elapsed = ticks / this.ticksPerSecond;
       if (ticks >= maxTicks) timeouts++;
@@ -72,10 +85,10 @@ class FunMeter {
     }
 
     if (verbose) process.stdout.write('\n'); // 진행률 라인 마무리
-    return this._analyze(game.getName(), times, scores, levels, timeouts, runs);
+    return this._analyze(game.getName(), times, scores, levels, timeouts, runs, allCurves);
   }
 
-  _analyze(name, times, scores, levels, timeouts, runs) {
+  _analyze(name, times, scores, levels, timeouts, runs, allCurves) {
     const sorted = [...times].sort((a, b) => a - b);
     const mean = times.reduce((a, b) => a + b, 0) / times.length;
     const median = this._percentile(sorted, 50);
@@ -149,6 +162,17 @@ class FunMeter {
       }
     }
 
+    // scoreCurve 분석 (allCurves가 있을 때만)
+    const scoreCurve = allCurves && allCurves.length > 0
+      ? this._analyzeScoreCurve(allCurves, this.maxSeconds)
+      : null;
+
+    // suggestions 생성
+    const suggestions = this._generateSuggestions(zone, {
+      median, timeoutRate, levelStats,
+      scoreCurve,
+    });
+
     return {
       name, times, scores, levels,
       mean, median, min, max, stddev,
@@ -159,7 +183,89 @@ class FunMeter {
       levelStats,
       levelMode: this.levelMode,
       zone, emoji, advice, runs,
+      suggestions,
+      scoreCurve,
     };
+  }
+
+  /**
+   * 점수 곡선 분석
+   * @param {number[][]} allCurves - runs × CURVE_BUCKETS 2D 배열
+   * @param {number} maxSeconds
+   * @returns {object} { buckets, pattern, growth1H, growth2H, growthRatio }
+   */
+  _analyzeScoreCurve(allCurves, maxSeconds) {
+    const CURVE_BUCKETS = allCurves[0]?.length ?? 20;
+    const buckets = Array.from({ length: CURVE_BUCKETS }, (_, i) => {
+      const vals = allCurves.map(curve => curve[i] ?? 0);
+      return vals.reduce((a, b) => a + b, 0) / vals.length;
+    });
+
+    const halfIdx = Math.floor(CURVE_BUCKETS / 2);
+    const timePerBucket = maxSeconds / CURVE_BUCKETS;
+
+    // 전반부: 버킷 0 → halfIdx
+    const growth1H = halfIdx > 0
+      ? (buckets[halfIdx] - buckets[0]) / (halfIdx * timePerBucket)
+      : 0;
+
+    // 후반부: halfIdx → CURVE_BUCKETS-1
+    const growth2H = (CURVE_BUCKETS - halfIdx - 1) > 0
+      ? (buckets[CURVE_BUCKETS - 1] - buckets[halfIdx])
+          / ((CURVE_BUCKETS - halfIdx - 1) * timePerBucket)
+      : 0;
+
+    const growthRatio = growth1H > 0.001 ? growth2H / growth1H : 1;
+
+    // 패턴 분류
+    const totalGrowth = (buckets[CURVE_BUCKETS - 1] - buckets[0]);
+    let pattern;
+    if (totalGrowth < 1) {
+      pattern = 'FLAT';          // 점수가 거의 안 오름 → 너무 어렵거나 점수 시스템 없음
+    } else if (growthRatio >= 1.5) {
+      pattern = 'EXPONENTIAL';   // 후반에 폭발적 성장 → 생존자 편향
+    } else {
+      pattern = 'LINEAR';        // 균등 성장 → 건강한 게임플레이
+    }
+
+    return { buckets, pattern, growth1H, growth2H, growthRatio };
+  }
+
+  /**
+   * 파라미터 조정 제안 생성
+   * @param {string} zone - 'TOO_HARD' | 'TOO_EASY' | 'FLOW'
+   * @param {object} stats - { median, timeoutRate, levelStats, scoreCurve }
+   * @returns {string[]}
+   */
+  _generateSuggestions(zone, stats) {
+    const suggestions = [];
+    const { median, timeoutRate, scoreCurve } = stats;
+
+    if (zone === 'TOO_HARD') {
+      suggestions.push('초기 난이도를 낮추거나 초반 진입 장벽을 줄여보세요.');
+      if (median < 2) {
+        suggestions.push('봇이 2초 이내에 사망합니다. 난이도 파라미터를 20~30% 이상 낮춰야 효과가 있을 수 있습니다.');
+      }
+      if (scoreCurve?.pattern === 'FLAT') {
+        suggestions.push('점수가 거의 쌓이지 않습니다. 생존 시간 자체를 늘리는 것이 우선입니다.');
+      }
+    } else if (zone === 'TOO_EASY') {
+      suggestions.push('난이도 상승 속도를 높이거나 초기 난이도를 올려보세요.');
+      if (timeoutRate > 0.8) {
+        suggestions.push(`${Math.round(timeoutRate * 100)}%가 제한 시간까지 생존합니다. 타임아웃 기준 또는 난이도를 조정하세요.`);
+      }
+      if (scoreCurve?.pattern === 'EXPONENTIAL') {
+        suggestions.push('후반 점수 성장이 매우 가파릅니다. 시간이 갈수록 쉬워지는 구조인지 확인하세요.');
+      }
+    } else {
+      // FLOW
+      suggestions.push('현재 설정이 Flow Zone에 있습니다. 이 난이도 범위를 유지하세요.');
+      if (scoreCurve?.pattern === 'EXPONENTIAL') {
+        suggestions.push('점수 증가가 후반에 집중됩니다. 초반 보상 구조도 점검해보세요.');
+      }
+    }
+
+    return suggestions;
   }
 
   /**
@@ -236,7 +342,59 @@ class FunMeter {
     console.log(bar);
     console.log(`\n${result.emoji} ${result.zone === 'FLOW' ? 'FLOW Zone! (재밌을 가능성 높음)' : result.zone === 'TOO_HARD' ? '너무 어려움' : '너무 쉬움'}`);
     console.log(`💡 ${result.advice}\n`);
+
+    // suggestions 출력
+    if (result.suggestions?.length > 0) {
+      console.log('\n제안');
+      for (const s of result.suggestions) {
+        console.log(`  • ${s}`);
+      }
+    }
+
+    // scoreCurve 패턴 출력
+    if (result.scoreCurve) {
+      const { pattern, growth1H, growth2H } = result.scoreCurve;
+      console.log(`\n점수 곡선: ${pattern} (전반 ${growth1H.toFixed(1)}/s → 후반 ${growth2H.toFixed(1)}/s)`);
+    }
   }
 }
 
+/**
+ * 파라미터 정보가 있을 때 더 구체적인 제안 생성
+ * @param {object} result - FunMeter.run() 결과
+ * @param {object} param  - { name, min, max, hardDirection, currentValue }
+ * @returns {string[]}
+ */
+function generateSuggestions(result, param) {
+  const suggestions = [...(result.suggestions ?? [])];
+
+  if (!param?.name || param.currentValue === undefined) return suggestions;
+
+  const { name, min, max, hardDirection, currentValue } = param;
+  const range = max - min;
+  const pct10 = range * 0.1;
+
+  if (result.zone === 'TOO_HARD') {
+    // 어렵게 만드는 방향의 반대로 조정
+    if (hardDirection === 'higher') {
+      const suggested = Math.max(min, currentValue - pct10).toFixed(2);
+      suggestions.push(`'${name}'를 ${currentValue.toFixed(2)} → ${suggested} 으로 낮추면 FLOW Zone에 가까워질 수 있습니다.`);
+    } else {
+      const suggested = Math.min(max, currentValue + pct10).toFixed(2);
+      suggestions.push(`'${name}'를 ${currentValue.toFixed(2)} → ${suggested} 으로 높이면 FLOW Zone에 가까워질 수 있습니다.`);
+    }
+  } else if (result.zone === 'TOO_EASY') {
+    if (hardDirection === 'higher') {
+      const suggested = Math.min(max, currentValue + pct10).toFixed(2);
+      suggestions.push(`'${name}'를 ${currentValue.toFixed(2)} → ${suggested} 으로 높이면 FLOW Zone에 가까워질 수 있습니다.`);
+    } else {
+      const suggested = Math.max(min, currentValue - pct10).toFixed(2);
+      suggestions.push(`'${name}'를 ${currentValue.toFixed(2)} → ${suggested} 으로 낮추면 FLOW Zone에 가까워질 수 있습니다.`);
+    }
+  }
+
+  return suggestions;
+}
+
 module.exports = FunMeter;
+module.exports.generateSuggestions = generateSuggestions;

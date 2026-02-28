@@ -29,6 +29,12 @@ class GameAdapter {
 
   /** 현재 생존 시간 (초) */
   getTime() { return this._time || 0; }
+
+  /**
+   * 현재 레벨/단계 (선택 구현)
+   * 구현하지 않으면 null → FunMeter가 레벨 통계 생략
+   */
+  getLevel() { return null; }
 }
 
 module.exports = GameAdapter;

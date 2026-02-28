@@ -25,13 +25,15 @@ class FunMeter {
   run(game, bot, runs = 100) {
     const times = [];
     const scores = [];
+    const levels = [];
     let timeouts = 0;
     const maxTicks = this.maxSeconds * this.ticksPerSecond;
+    const supportsLevel = typeof game.getLevel === 'function';
 
     for (let i = 0; i < runs; i++) {
       game.reset();
+      if (bot.reset) bot.reset(); // 봇 상태 초기화 (HumanLikeBot 등)
       let ticks = 0;
-      let timedOut = false;
 
       while (game.isAlive() && ticks < maxTicks) {
         const input = bot.decide(game);
@@ -40,29 +42,55 @@ class FunMeter {
       }
 
       const elapsed = ticks / this.ticksPerSecond;
-      if (ticks >= maxTicks) {
-        timedOut = true;
-        timeouts++;
-      }
+      if (ticks >= maxTicks) timeouts++;
 
       times.push(elapsed);
       scores.push(game.getScore());
+      if (supportsLevel) {
+        const lv = game.getLevel();
+        if (lv !== null) levels.push(lv);
+      }
     }
 
-    return this._analyze(game.getName(), times, scores, timeouts, runs);
+    return this._analyze(game.getName(), times, scores, levels, timeouts, runs);
   }
 
-  _analyze(name, times, scores, timeouts, runs) {
+  _analyze(name, times, scores, levels, timeouts, runs) {
     const sorted = [...times].sort((a, b) => a - b);
     const mean = times.reduce((a, b) => a + b, 0) / times.length;
-    const median = sorted[Math.floor(sorted.length / 2)];
+    const median = this._percentile(sorted, 50);
     const min = sorted[0];
     const max = sorted[sorted.length - 1];
     const timeoutRate = timeouts / runs;
 
+    // 표준편차
+    const variance = times.reduce((acc, t) => acc + (t - mean) ** 2, 0) / times.length;
+    const stddev = Math.sqrt(variance);
+
+    // 퍼센타일
+    const p25 = this._percentile(sorted, 25);
+    const p75 = this._percentile(sorted, 75);
+    const p90 = this._percentile(sorted, 90);
+    const p95 = this._percentile(sorted, 95);
+
+    // 히스토그램 (10개 버킷)
+    const histogram = this._histogram(times, min, max, 10);
+
+    // 점수 통계
     const sortedScores = [...scores].sort((a, b) => a - b);
     const scoreMean = scores.reduce((a, b) => a + b, 0) / scores.length;
     const scoreMax = sortedScores[sortedScores.length - 1];
+
+    // 레벨 통계 (게임이 실제 레벨 값을 반환할 때만)
+    let levelStats = null;
+    if (levels.length > 0) {
+      const sortedLevels = [...levels].sort((a, b) => a - b);
+      levelStats = {
+        mean: levels.reduce((a, b) => a + b, 0) / levels.length,
+        median: this._percentile(sortedLevels, 50),
+        max: sortedLevels[sortedLevels.length - 1],
+      };
+    }
 
     // Flow Zone 판정
     let zone, emoji, advice;
@@ -80,25 +108,87 @@ class FunMeter {
       advice = '균형 잘 잡혔어. 난이도 상승 곡선 유지하면 됨.';
     }
 
-    return { name, times, scores, mean, median, min, max, timeoutRate, scoreMean, scoreMax, zone, emoji, advice, runs };
+    return {
+      name, times, scores, levels,
+      mean, median, min, max, stddev,
+      p25, p75, p90, p95,
+      histogram,
+      timeoutRate,
+      scoreMean, scoreMax,
+      levelStats,
+      zone, emoji, advice, runs,
+    };
+  }
+
+  /**
+   * 정렬된 배열에서 퍼센타일 값 반환 (선형 보간)
+   */
+  _percentile(sorted, p) {
+    if (sorted.length === 0) return 0;
+    const idx = (p / 100) * (sorted.length - 1);
+    const lo = Math.floor(idx);
+    const hi = Math.ceil(idx);
+    if (lo === hi) return sorted[lo];
+    return sorted[lo] + (sorted[hi] - sorted[lo]) * (idx - lo);
+  }
+
+  /**
+   * 히스토그램 생성
+   * @returns {Array<{from, to, count, bar}>}
+   */
+  _histogram(values, min, max, buckets) {
+    if (min === max) return [{ from: min, to: max, count: values.length, bar: '█'.repeat(10) }];
+    const step = (max - min) / buckets;
+    const hist = Array.from({ length: buckets }, (_, i) => ({
+      from: min + i * step,
+      to: min + (i + 1) * step,
+      count: 0,
+    }));
+    for (const v of values) {
+      const idx = Math.min(Math.floor((v - min) / step), buckets - 1);
+      hist[idx].count++;
+    }
+    const maxCount = Math.max(...hist.map(h => h.count), 1);
+    for (const h of hist) {
+      h.bar = '█'.repeat(Math.round((h.count / maxCount) * 15));
+    }
+    return hist;
   }
 
   /**
    * 결과를 보기 좋게 출력
    */
   print(result) {
-    const bar = '─'.repeat(40);
-    console.log(`\n📊 결과: ${result.name}`);
+    const bar = '─'.repeat(50);
+    console.log(`\n📊 결과: ${result.name} (${result.runs}회)`);
     console.log(bar);
+
     console.log(`생존 시간`);
-    console.log(`  평균:   ${result.mean.toFixed(1)}초`);
-    console.log(`  중앙값: ${result.median.toFixed(1)}초`);
-    console.log(`  최소:   ${result.min.toFixed(1)}초`);
-    console.log(`  최대:   ${result.max.toFixed(1)}초`);
-    console.log(`점수`);
+    console.log(`  평균:   ${result.mean.toFixed(1)}s  (σ=${result.stddev.toFixed(1)}s)`);
+    console.log(`  중앙값: ${result.median.toFixed(1)}s`);
+    console.log(`  범위:   ${result.min.toFixed(1)}s ~ ${result.max.toFixed(1)}s`);
+    console.log(`  p25/p75/p90: ${result.p25.toFixed(1)}s / ${result.p75.toFixed(1)}s / ${result.p90.toFixed(1)}s`);
+
+    // 히스토그램
+    console.log(`\n분포 (히스토그램)`);
+    for (const h of result.histogram) {
+      const label = `${h.from.toFixed(1)}~${h.to.toFixed(1)}s`.padEnd(14);
+      console.log(`  ${label} ${h.bar} (${h.count})`);
+    }
+
+    console.log(`\n점수`);
     console.log(`  평균:   ${Math.round(result.scoreMean)}`);
     console.log(`  최고:   ${result.scoreMax}`);
-    console.log(`타임아웃: ${(result.timeoutRate * 100).toFixed(0)}%`);
+
+    // 레벨 통계 (지원 시)
+    if (result.levelStats) {
+      console.log(`\n레벨`);
+      console.log(`  평균:   ${result.levelStats.mean.toFixed(1)}`);
+      console.log(`  중앙값: ${result.levelStats.median.toFixed(1)}`);
+      console.log(`  최고:   ${result.levelStats.max}`);
+    }
+
+    console.log(`\n타임아웃: ${(result.timeoutRate * 100).toFixed(0)}%`);
     console.log(bar);
     console.log(`\n${result.emoji} ${result.zone === 'FLOW' ? 'FLOW Zone! (재밌을 가능성 높음)' : result.zone === 'TOO_HARD' ? '너무 어려움' : '너무 쉬움'}`);
     console.log(`💡 ${result.advice}\n`);

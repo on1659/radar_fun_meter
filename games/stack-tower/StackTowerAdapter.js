@@ -137,6 +137,7 @@ class StackTowerAdapter extends GameAdapter {
   isAlive() { return this.alive; }
   getDifficulty() { return Math.min(this.speed / 20, 1); }
   getName() { return 'StackTower'; }
+  getLevel() { return this.level; }
 }
 
 module.exports = StackTowerAdapter;

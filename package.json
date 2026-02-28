@@ -4,6 +4,13 @@
   "description": "Flow Theory 기반 게임 재미 측정 도구 — 봇이 게임을 N번 플레이해서 FLOW Zone 자동 판정",
   "main": "src/index.js",
   "types": "src/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./src/esm/index.js",
+      "require": "./src/index.js",
+      "types": "./src/index.d.ts"
+    }
+  },
   "bin": {
     "funmeter": "./src/cli.js"
   },
@@ -36,7 +43,7 @@
     "node": ">=16.0.0"
   },
   "scripts": {
-    "test": "node --test tests/*.test.js",
+    "test": "node --test tests/*.test.js tests/**/*.test.js",
     "test:example": "node src/cli.js --game=example --runs=100",
     "test:timing-jump": "node src/cli.js --game=timing-jump --runs=100",
     "test:rhythm-tap": "node src/cli.js --game=rhythm-tap --runs=100",

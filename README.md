@@ -107,11 +107,25 @@ module.exports = MyGame;
 | 게임 | 파일 | 봇 타입 |
 |------|------|---------|
 | `example` | `games/example/ExampleGame.js` | 랜덤 점프 |
-| `timing-jump` | `games/timing-jump/TimingJumpAdapter.js` | 랜덤 점프 |
+| `timing-jump` | `games/timing-jump/TimingJumpAdapter.js` | 랜덤 점프 / HumanLikeBot |
 | `rhythm-tap` | `games/rhythm-tap/RhythmTapAdapter.js` | 자동 탭 (정확도 조절 가능) |
 | `stack-tower` | `games/stack-tower/StackTowerAdapter.js` | 위치 기반 드롭 |
+| `flappy-bird` | `games/flappy-bird/FlappyBirdAdapter.js` | FlappyBirdBot (기본) |
 
-## 최신 진단 결과 (2026-03-01)
+## 최신 기능 & 진단 결과
+
+### 🎯 최신 추가 (2026-03-01 01:30 AM)
+
+**진행률 표시** - 20회 이상 실행 시 자동으로 진행률 바 표시
+```
+진행: [████████████████░░░░] 82% (41/50)
+```
+
+**FlappyBird 예제 게임** - HumanLikeBot 호환 완전한 게임 구현
+- 전용 FlappyBirdBot으로 파이프 간격 자동 통과
+- Optimizer로 pipeSpeed 자동 탐색
+
+### 기존 진단 결과
 
 ```
 타이밍 점프: ✅ HumanLikeBot + Optimizer로 Flow Zone 도달!

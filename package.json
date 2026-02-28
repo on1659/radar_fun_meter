@@ -1,6 +1,6 @@
 {
   "name": "radar_fun_meter",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "description": "Flow Theory 기반 게임 재미 측정 도구 — 봇이 게임을 N번 플레이해서 FLOW Zone 자동 판정",
   "main": "src/FunMeter.js",
   "bin": {
@@ -39,9 +39,10 @@
     "test:timing-jump": "node src/cli.js --game=timing-jump --runs=100",
     "test:rhythm-tap": "node src/cli.js --game=rhythm-tap --runs=100",
     "test:stack-tower": "node src/cli.js --game=stack-tower --runs=100",
+    "test:flappy-bird": "node src/cli.js --game=flappy-bird --runs=100 --bot=flappy",
     "test:heartbeat": "node src/cli.js --game=heartbeat --runs=100",
-    "test:all": "node src/cli.js --game=example --runs=50 && node src/cli.js --game=timing-jump --runs=50 && node src/cli.js --game=rhythm-tap --runs=50 && node src/cli.js --game=stack-tower --runs=50 && node src/cli.js --game=heartbeat --runs=50",
+    "test:all": "node src/cli.js --game=example --runs=50 && node src/cli.js --game=timing-jump --runs=50 && node src/cli.js --game=rhythm-tap --runs=50 && node src/cli.js --game=stack-tower --runs=50 && node src/cli.js --game=flappy-bird --runs=50 --bot=flappy && node src/cli.js --game=heartbeat --runs=50",
     "pack": "npm pack --dry-run",
-    "prepublishOnly": "node --check src/cli.js src/FunMeter.js src/GameAdapter.js src/Optimizer.js src/bots/RandomBot.js src/bots/HumanLikeBot.js && npm run test:example"
+    "prepublishOnly": "node --check src/cli.js src/FunMeter.js src/GameAdapter.js src/Optimizer.js src/bots/RandomBot.js src/bots/HumanLikeBot.js src/bots/FlappyBirdBot.js && npm run test:example"
   }
 }

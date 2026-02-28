@@ -127,11 +127,68 @@ export declare class FunMeter {
     options?: { verbose?: boolean }
   ): RunResult;
 
+  /**
+   * 브라우저 게임을 비동기 폴링 루프로 N번 플레이하고 분석
+   */
+  runBrowser(
+    adapter: BrowserGameAdapter,
+    bot: BrowserBot,
+    options?: BrowserRunOptions
+  ): Promise<RunResult>;
+
   /** 사망 패턴 분석 */
   computeDeathPattern(times: number[]): DeathPattern;
 
   /** 결과를 콘솔에 보기 좋게 출력 */
   print(result: RunResult): void;
+}
+
+// ─── BrowserGameAdapter ────────────────────────────────────
+
+export interface BrowserGameAdapterConfig {
+  url: string;
+  actions?: string[];
+  scoreSelector?: string;
+  deathSelector?: string;
+  restartSelector?: string | null;
+  usePostMessage?: boolean;
+  pollInterval?: number;
+  timeout?: number;
+  headless?: boolean;
+  name?: string;
+}
+
+export declare class BrowserGameAdapter {
+  config: BrowserGameAdapterConfig;
+  constructor(config: BrowserGameAdapterConfig);
+  init(): Promise<void>;
+  reset(): Promise<void>;
+  update(action: string | null): Promise<void>;
+  getScore(): Promise<number>;
+  isAlive(): Promise<boolean>;
+  getName(): string;
+  close(): Promise<void>;
+}
+
+// ─── BrowserBot ────────────────────────────────────────────
+
+export interface BrowserBotConfig {
+  actions?: string[];
+  jumpProb?: number;
+}
+
+export declare class BrowserBot {
+  actions: string[];
+  jumpProb: number;
+  constructor(config?: BrowserBotConfig);
+  act(state: { score: number; elapsed: number }): string | null;
+  reset(): void;
+}
+
+export interface BrowserRunOptions {
+  pollInterval?: number;
+  maxSeconds?: number;
+  runs?: number;
 }
 
 // ─── Optimizer ─────────────────────────────────────────────

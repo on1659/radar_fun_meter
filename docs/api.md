@@ -11,7 +11,7 @@
 ### constructor(options)
 
 ```js
-const { FunMeter } = require('radar-fun-meter');
+const { FunMeter } = require('radar_fun_meter');
 const meter = new FunMeter(options);
 ```
 
@@ -24,6 +24,8 @@ const meter = new FunMeter(options);
 | `levelMode` | `boolean` | `false` | 레벨 모드 활성화 (getLevel() 지원 게임) |
 | `levelFlowMinMedian` | `number` | `3` | 레벨 모드 FLOW 최소 중앙값 (레벨 수) |
 | `levelFlowMaxMedian` | `number` | `10` | 레벨 모드 FLOW 최대 중앙값 (레벨 수) |
+| `genre` | `string` | — | 장르 프리셋 (`'action'`, `'rhythm'`, `'puzzle'`, `'survival'`) |
+| `flowCriteria` | `object` | — | 커스텀 Flow 기준 (`{ minMedian, maxTimeoutRate }`) |
 
 ```js
 // 예시 1: 기본 설정으로 생성
@@ -77,11 +79,14 @@ const result = meter.run(game, bot, runs, options);
 | `zone` | `'FLOW' \| 'TOO_HARD' \| 'TOO_EASY'` | Flow Zone 판정 결과 |
 | `emoji` | `string` | 판정 결과 이모지 |
 | `advice` | `string` | 난이도 조정 조언 |
+| `deathPattern` | `DeathPattern` | 사망 패턴 분석 결과 |
+| `suggestions` | `string[]` | 구체적 파라미터 조정 제안 |
+| `scoreCurve` | `object \| null` | 점수 곡선 통계 |
 
 ```js
 // 예시 1: 기본 실행
-const { FunMeter, RandomBot } = require('radar-fun-meter');
-const TimingJumpAdapter = require('radar-fun-meter/games/timing-jump/TimingJumpAdapter');
+const { FunMeter, RandomBot } = require('radar_fun_meter');
+const TimingJumpAdapter = require('radar_fun_meter/games/timing-jump/TimingJumpAdapter');
 
 const meter = new FunMeter({ maxSeconds: 30 });
 const game = new TimingJumpAdapter({ initialSpeed: 120 });
@@ -92,7 +97,7 @@ console.log(result.zone);    // 'FLOW' | 'TOO_HARD' | 'TOO_EASY'
 console.log(result.median);  // 중앙값 생존 시간 (초)
 
 // 예시 2: SmartBot으로 실행
-const { SmartBot } = require('radar-fun-meter');
+const { SmartBot } = require('radar_fun_meter');
 const bot2 = new SmartBot({ hint: 'platformer' });
 const result2 = meter.run(game, bot2, 50, { verbose: false });
 ```
@@ -141,6 +146,43 @@ Zone:   🌊 FLOW
 
 ---
 
+### genre / flowCriteria 옵션
+
+장르 프리셋을 사용하면 Flow Zone 기준을 자동으로 설정할 수 있습니다.
+
+```js
+const { FunMeter, GENRE_PRESETS } = require('radar_fun_meter');
+
+const meter = new FunMeter({ genre: 'action' });
+// 동일:
+const meter2 = new FunMeter({ flowCriteria: GENRE_PRESETS.action });
+```
+
+| 장르 | minMedian | maxTimeoutRate | 설명 |
+|------|-----------|----------------|------|
+| `action` | 5s | 30% | 반사 신경 게임 — 빠른 실패 허용 |
+| `rhythm` | 10s | 40% | 리듬 게임 — 중간 정밀도 |
+| `puzzle` | 15s | 60% | 퍼즐 게임 — 긴 생존 허용 |
+| `survival` | 8s | 20% | 생존 게임 — 시간 압박 높음 |
+
+### deathPattern
+
+`RunResult.deathPattern`은 생존 시간 분포의 형태를 분석합니다.
+
+```ts
+interface DeathPattern {
+  skewness: number;   // 양수 = 앞쪽 집중, 음수 = 뒤쪽 집중
+  kurtosis: number;   // 양수 = 뾰족한 분포, 음수 = 평평한 분포
+  cluster: 'early' | 'uniform' | 'late';
+}
+```
+
+- `'early'`: 초반 사망 집중 → 난이도가 높거나 초반 스파이크 존재
+- `'late'`: 후반 사망 집중 → 게임이 너무 쉽거나 maxSeconds 근접
+- `'uniform'`: 고르게 분포 → 밸런스 양호
+
+---
+
 ## Optimizer
 
 이진 탐색(binary search)으로 Flow Zone을 달성하는 게임 파라미터를 자동으로 찾는다.
@@ -148,7 +190,7 @@ Zone:   🌊 FLOW
 ### constructor(options)
 
 ```js
-const { Optimizer } = require('radar-fun-meter');
+const { Optimizer } = require('radar_fun_meter');
 const optimizer = new Optimizer(options);
 ```
 
@@ -224,9 +266,68 @@ const { config, result } = optimizer.optimizeByName(
 
 ```js
 // 예시 2: DEFAULT_PARAMS 직접 확인
-const { DEFAULT_PARAMS } = require('radar-fun-meter');
+const { DEFAULT_PARAMS } = require('radar_fun_meter');
 console.log(DEFAULT_PARAMS['timing-jump']);
 // { name: 'initialSpeed', min: 80, max: 400, hardDirection: 'higher', ... }
+```
+
+---
+
+## BrowserGameAdapter
+
+Playwright를 사용해 실제 웹게임 URL을 테스트할 수 있는 어댑터.
+
+> **필요 조건**: `npm install playwright && npx playwright install chromium`
+
+```js
+const { BrowserGameAdapter, BrowserBot, FunMeter } = require('radar_fun_meter');
+
+const adapter = new BrowserGameAdapter({
+  url: 'http://localhost:3000',
+  scoreSelector: '#score',
+  deathSelector: '.game-over',
+  actions: ['Space', 'ArrowLeft'],
+});
+
+const bot = new BrowserBot({ actions: ['Space'], jumpProb: 0.05 });
+const meter = new FunMeter();
+const result = await meter.runBrowser(adapter, bot, { runs: 30 });
+meter.print(result);
+```
+
+### constructor(config)
+
+| 옵션 | 타입 | 기본값 | 설명 |
+|------|------|--------|------|
+| `url` | `string` | 필수 | 게임 URL |
+| `actions` | `string[]` | `['Space']` | 허용 키 입력 목록 |
+| `scoreSelector` | `string` | `'#score'` | 점수 DOM 셀렉터 |
+| `deathSelector` | `string` | `'.game-over'` | 게임오버 DOM 셀렉터 |
+| `restartSelector` | `string \| null` | `null` | 재시작 버튼 셀렉터 (없으면 reload) |
+| `usePostMessage` | `boolean` | `false` | postMessage 기반 상태 수신 모드 |
+| `pollInterval` | `number` | `50` | DOM 폴링 주기 (ms) |
+| `timeout` | `number` | `60000` | 최대 생존 시간 (ms) |
+| `headless` | `boolean` | `true` | 헤드리스 모드 |
+| `name` | `string` | URL hostname | 게임 이름 |
+
+### CLI --url 옵션
+
+```bash
+# 기본 브라우저 모드
+funmeter --url=http://localhost:3000 \
+  --actions=Space,ArrowLeft \
+  --scoreSelector=#score \
+  --deathSelector=.game-over \
+  --runs=30
+
+# 재시작 버튼이 있는 경우
+funmeter --url=http://localhost:3000 \
+  --restartSelector=.restart-btn \
+  --runs=50 \
+  --output=report.html
+
+# 헤드리스 끄기 (디버깅)
+funmeter --url=http://localhost:3000 --headed
 ```
 
 ---
@@ -255,7 +356,7 @@ console.log(DEFAULT_PARAMS['timing-jump']);
 
 ```js
 // 예시 1: 최소 구현
-const { GameAdapter } = require('radar-fun-meter');
+const { GameAdapter } = require('radar_fun_meter');
 
 class MyGame extends GameAdapter {
   constructor(config = {}) {

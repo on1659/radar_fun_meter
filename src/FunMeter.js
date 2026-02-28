@@ -420,6 +420,66 @@ class FunMeter {
       console.log(`\n점수 곡선: ${pattern} (전반 ${growth1H.toFixed(1)}/s → 후반 ${growth2H.toFixed(1)}/s)`);
     }
   }
+
+  /**
+   * 브라우저 게임을 비동기 폴링 루프로 N번 플레이하고 분석
+   * @param {BrowserGameAdapter} browserAdapter
+   * @param {BrowserBot} bot
+   * @param {object} [options]
+   * @param {number} [options.pollInterval] - 폴링 주기 ms (기본: 50)
+   * @param {number} [options.maxSeconds] - 최대 생존 시간 초 (기본: this.maxSeconds)
+   * @param {number} [options.runs] - 실행 횟수 (기본: 30)
+   * @returns {Promise<object>} RunResult
+   */
+  async runBrowser(browserAdapter, bot, options = {}) {
+    const {
+      pollInterval = 50,
+      maxSeconds = this.maxSeconds,
+      runs = 30,
+    } = options;
+
+    await browserAdapter.init();
+
+    const times = [];
+    const scores = [];
+    let timeouts = 0;
+
+    for (let i = 0; i < runs; i++) {
+      await browserAdapter.reset();
+      if (bot.reset) bot.reset();
+
+      const startTime = Date.now();
+
+      while (true) {
+        const elapsed = (Date.now() - startTime) / 1000;
+        if (elapsed >= maxSeconds) {
+          times.push(maxSeconds);
+          timeouts++;
+          break;
+        }
+
+        const alive = await browserAdapter.isAlive();
+        if (!alive) {
+          times.push(elapsed);
+          break;
+        }
+
+        const score = await browserAdapter.getScore();
+        const action = await Promise.resolve(
+          bot.act ? bot.act({ score, elapsed }) : bot.update(null)
+        );
+        await browserAdapter.update(action);
+
+        await new Promise(r => setTimeout(r, pollInterval));
+      }
+
+      scores.push(await browserAdapter.getScore());
+    }
+
+    await browserAdapter.close();
+
+    return this._analyze(browserAdapter.getName(), times, scores, [], timeouts, runs, []);
+  }
 }
 
 /**

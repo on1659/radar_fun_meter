@@ -226,6 +226,54 @@ async function main() {
   if (args.help) printHelp(); // 내부에서 process.exit(0)
   if (args['list-games']) printListGames();
 
+  const runs = args.runs || 100;
+  const maxSeconds = args.maxSeconds || 60;
+
+  // --url 모드: 브라우저 자동화
+  if (args.url) {
+    let playwright;
+    try {
+      playwright = await import('playwright');
+    } catch {
+      console.error([
+        '❌ Playwright가 설치되지 않았습니다.',
+        '브라우저 모드를 사용하려면 아래 명령어를 실행하세요:',
+        '',
+        '  npm install playwright',
+        '  npx playwright install chromium',
+      ].join('\n'));
+      process.exit(1);
+    }
+
+    const { BrowserGameAdapter } = await import('./BrowserGameAdapter.js');
+    const { BrowserBot } = await import('./bots/BrowserBot.js');
+
+    const actions = (args.actions ?? 'Space').toString().split(',').map(s => s.trim());
+    const scoreSelector = args.scoreSelector ?? '#score';
+    const deathSelector = args.deathSelector ?? '.game-over';
+    const restartSelector = args.restartSelector ?? null;
+
+    const adapter = new BrowserGameAdapter({
+      url: args.url,
+      actions,
+      scoreSelector,
+      deathSelector,
+      restartSelector,
+      headless: !args.headed,
+    });
+
+    const botJumpProb = args['bot.jumpProb'] ?? 0.05;
+    const bot = new BrowserBot({ actions, jumpProb: botJumpProb });
+    const meter = new FunMeter({ ticksPerSecond: 60, maxSeconds });
+
+    console.log(`🌐 브라우저 모드: ${args.url}`);
+    const result = await meter.runBrowser(adapter, bot, { runs, maxSeconds });
+    meter.print(result);
+
+    if (args.output) saveResult(args.output, result);
+    return;
+  }
+
   const gameName = args.game || 'example';
 
   if (!GAMES[gameName]) {
@@ -242,7 +290,6 @@ async function main() {
   }
 
   // 일반 실행 모드
-  const runs = args.runs || 100;
   console.log(`🎮 ${gameName} 테스트 시작... (${runs}회, bot=${args.bot || 'random'})`);
   if (Object.keys(args.config).length > 0) {
     console.log(`⚙️  설정:`, args.config);

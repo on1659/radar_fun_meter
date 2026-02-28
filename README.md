@@ -3,6 +3,29 @@
 **범용 게임 재미 측정 도구**  
 Flow Theory 기반으로 게임 밸런스를 자동 분석해줌.
 
+[![npm version](https://img.shields.io/npm/v/radar_fun_meter.svg)](https://www.npmjs.com/package/radar_fun_meter)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
+## 설치
+
+```bash
+# npm 글로벌 설치
+npm install -g radar_fun_meter
+
+# 또는 로컬 프로젝트에 설치
+npm install radar_fun_meter
+
+# CLI 실행
+funmeter --game=example --runs=100
+```
+
+개발 모드 (로컬 클론):
+```bash
+git clone https://github.com/on1659/radar_fun_meter.git
+cd radar_fun_meter
+node src/cli.js --game=example --runs=100
+```
+
 ## 컨셉
 
 > 재미 = 실력과 난이도의 균형 (Flow Theory)
@@ -15,19 +38,46 @@ Flow Theory 기반으로 게임 밸런스를 자동 분석해줌.
 ## 사용법
 
 ```bash
-# 예제 게임 테스트
+# 예제 게임 테스트 (기본: RandomBot)
 node src/cli.js --game=example --runs=100
 
-# 타이밍 점프 테스트
-node src/cli.js --game=timing-jump --runs=100
+# HumanLikeBot 사용 (사람처럼 반응)
+node src/cli.js --game=timing-jump --runs=100 --bot=humanlike
 
 # 파라미터 조정하면서 비교
 node src/cli.js --game=timing-jump --runs=100 --config.initialSpeed=150
 node src/cli.js --game=timing-jump --runs=100 --config.initialSpeed=260
 
+# 🚀 자동 최적화 (Flow Zone 도달까지 파라미터 탐색)
+node src/cli.js --game=timing-jump --optimize --opt.runs=50 --opt.iter=15 --bot=humanlike
+
 # 모든 게임 한번에
 npm run test:all
 ```
+
+### 봇 타입
+
+| 봇 | 설명 | 용도 |
+|------|------|------|
+| `random` | 랜덤 확률로 입력 (기본) | 빠른 테스트, 극단적 난이도 체크 |
+| `humanlike` | 장애물/이벤트 감지 후 반응 (100~300ms 지연) | 실제 사람 플레이 시뮬레이션, 정확한 밸런스 측정 |
+
+### 자동 최적화
+
+Flow Zone에 도달할 때까지 게임 파라미터를 자동 탐색합니다 (Binary Search 기반).
+
+```bash
+# 기본 (게임별 기본 파라미터 자동 적용)
+node src/cli.js --game=timing-jump --optimize
+
+# 옵션 조절
+node src/cli.js --game=stack-tower --optimize \
+  --opt.runs=30 \      # 반복당 실행 횟수 (기본 50)
+  --opt.iter=20 \      # 최대 반복 횟수 (기본 20)
+  --bot=humanlike      # 봇 타입 지정
+```
+
+지원 게임: `timing-jump`, `stack-tower`, `rhythm-tap`, `heartbeat` (예제)
 
 ## 새 게임 추가
 
@@ -61,20 +111,20 @@ module.exports = MyGame;
 | `rhythm-tap` | `games/rhythm-tap/RhythmTapAdapter.js` | 자동 탭 (정확도 조절 가능) |
 | `stack-tower` | `games/stack-tower/StackTowerAdapter.js` | 위치 기반 드롭 |
 
-## 현재 진단 결과 (2026-02-28)
+## 최신 진단 결과 (2026-03-01)
 
 ```
-타이밍 점프: 😵 너무 어려움 (봇 중앙값 3.5초)
-  → initialSpeed=260이 랜덤봇에겐 과함
-  → 실제 사람은 더 오래 살지만 체감 검증 필요
+타이밍 점프: ✅ HumanLikeBot + Optimizer로 Flow Zone 도달!
+  → initialSpeed=120으로 최적화 시 중앙값 5.3초 (FLOW)
+  → 사람처럼 반응하는 봇으로 훨씬 정확한 밸런스 측정 가능
 
-리듬 탭: 😴 너무 쉬움 (봇 타임아웃 100%)  
-  → 봇이 자동 탭이라 miss가 거의 없음
-  → 봇 정확도 낮추거나 miss 기준 강화 필요
+리듬 탭: 자동 탭 정확도 조절 가능
+  → HumanLikeBot accuracy 파라미터로 실수율 조절
+  → Optimizer로 botAccuracy 자동 탐색
 
-스택 타워: 😵 생존 시간 측정 부적합
-  → 레벨 기반 측정이 더 적합한 게임
-  → TODO: 레벨 어댑터 추가
+스택 타워: ✅ 레벨 기반 측정 완벽 지원!
+  → 레벨 중앙값 10으로 Flow Zone 판정 (5~25 범위)
+  → Optimizer가 botError 자동 탐색하여 최적 난이도 찾음
 ```
 
 ## 결과 예시

@@ -22,6 +22,15 @@
     "game-design"
   ],
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/on1659/radar_fun_meter.git"
+  },
+  "bugs": {
+    "url": "https://github.com/on1659/radar_fun_meter/issues"
+  },
+  "homepage": "https://github.com/on1659/radar_fun_meter#readme",
+  "author": "KimYoungtae <yt.radar@gmail.com>",
   "engines": {
     "node": ">=16.0.0"
   },

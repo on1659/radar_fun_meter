@@ -1,9 +1,0 @@
-radar_fun_meter: 5가지 우선순위 작업 완료!
-
-✅ HumanLikeBot 준비 — ExampleGame 호환성 수정
-✅ 통계 강화 — 표준편차, 퍼센타일, 히스토그램 추가
-✅ 레벨 기반 측정 — FunMeter & StackTower 연결
-✅ npm 패키지 배포 준비 — bin 등록, .npmignore 작성
-✅ CONTRIBUTING.md — 게임 어댑터 가이드 275줄 작성
-
-테스트 성공, 커밋 & 푸시 완료!

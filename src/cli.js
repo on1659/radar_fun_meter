@@ -12,6 +12,60 @@ const HumanLikeBot = require('./bots/HumanLikeBot');
 const FlappyBirdBot = require('./bots/FlappyBirdBot');
 const { Optimizer, DEFAULT_PARAMS } = require('./Optimizer');
 
+function printHelp() {
+  console.log(`
+radar_fun_meter — Flow Theory 기반 게임 재미 측정 도구
+
+사용법:
+  funmeter --game=<이름> [옵션]
+  funmeter --game=<이름> --optimize [최적화 옵션]
+  funmeter --help
+
+기본 옵션:
+  --game=<이름>           게임 선택 (기본: example)
+                          가능한 값: example, timing-jump, rhythm-tap,
+                                    stack-tower, flappy-bird, heartbeat
+  --runs=<n>              실행 횟수 (기본: 100)
+  --bot=random|human      봇 종류 (기본: random)
+  --output=<파일.json>    결과를 JSON 파일로 저장
+
+봇 옵션:
+  --bot.jumpProb=<0~1>    RandomBot 점프 확률 (기본: 0.05)
+  --bot.accuracy=<0~1>    HumanLikeBot 정확도 (기본: 0.9)
+  --bot.reactionMin=<ms>  반응 지연 최소 (기본: 100)
+  --bot.reactionMax=<ms>  반응 지연 최대 (기본: 300)
+
+게임 파라미터:
+  --config.<키>=<값>      게임 생성자에 전달 (예: --config.initialSpeed=120)
+
+최적화 옵션:
+  --optimize              최적화 모드 활성화
+  --opt.runs=<n>          반복당 실행 횟수 (기본: 50)
+  --opt.iter=<n>          최대 탐색 횟수 (기본: 20)
+  --opt.param=<이름>      탐색할 파라미터 이름 (커스텀)
+  --opt.min=<값>          탐색 최솟값
+  --opt.max=<값>          탐색 최댓값
+  --opt.direction=higher|lower  어려워지는 방향
+
+예시:
+  funmeter --game=timing-jump --runs=100 --bot=human
+  funmeter --game=timing-jump --optimize --opt.runs=50
+  funmeter --game=example --runs=50 --output=result.json
+`);
+  process.exit(0);
+}
+
+function saveResult(filePath, result) {
+  const fs = require('fs');
+  const data = { ...result, generatedAt: new Date().toISOString() };
+  try {
+    fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf8');
+    console.log(`💾 결과 저장됨: ${filePath}`);
+  } catch (err) {
+    console.error(`❌ 저장 실패 (${filePath}): ${err.message}`);
+  }
+}
+
 // 게임 레지스트리
 const GAMES = {
   example: () => require('../games/example/ExampleGame'),
@@ -123,6 +177,10 @@ async function runOptimize(args, gameName, GameClass) {
 
 async function main() {
   const args = parseArgs(process.argv);
+
+  // --help
+  if (args.help) printHelp(); // 내부에서 process.exit(0)
+
   const gameName = args.game || 'example';
 
   if (!GAMES[gameName]) {
@@ -153,6 +211,9 @@ async function main() {
   const meter = new FunMeter({ ticksPerSecond: 60, maxSeconds: 60, ...gameFlowOptions });
   const result = meter.run(game, bot, runs, { verbose: runs >= 20 });
   meter.print(result);
+
+  // --output
+  if (args.output) saveResult(args.output, result);
 }
 
 main().catch(err => {

@@ -30,15 +30,17 @@ class FunMeter {
    * @param {GameAdapter} game
    * @param {Bot} bot
    * @param {number} runs
+   * @param {object} options - { verbose: boolean }
    * @returns {object} 분석 결과
    */
-  run(game, bot, runs = 100) {
+  run(game, bot, runs = 100, options = {}) {
     const times = [];
     const scores = [];
     const levels = [];
     let timeouts = 0;
     const maxTicks = this.maxSeconds * this.ticksPerSecond;
     const supportsLevel = typeof game.getLevel === 'function';
+    const verbose = options.verbose ?? true;
 
     for (let i = 0; i < runs; i++) {
       game.reset();
@@ -60,8 +62,16 @@ class FunMeter {
         const lv = game.getLevel();
         if (lv !== null) levels.push(lv);
       }
+
+      // 진행률 표시 (10회마다 또는 마지막)
+      if (verbose && (i % 10 === 0 || i === runs - 1)) {
+        const pct = Math.round(((i + 1) / runs) * 100);
+        const bar = '█'.repeat(Math.floor(pct / 5)) + '░'.repeat(20 - Math.floor(pct / 5));
+        process.stdout.write(`\r진행: [${bar}] ${pct}% (${i + 1}/${runs})`);
+      }
     }
 
+    if (verbose) process.stdout.write('\n'); // 진행률 라인 마무리
     return this._analyze(game.getName(), times, scores, levels, timeouts, runs);
   }
 

@@ -9,6 +9,7 @@
 const FunMeter = require('./FunMeter');
 const RandomBot = require('./bots/RandomBot');
 const HumanLikeBot = require('./bots/HumanLikeBot');
+const FlappyBirdBot = require('./bots/FlappyBirdBot');
 const { Optimizer, DEFAULT_PARAMS } = require('./Optimizer');
 
 // 게임 레지스트리
@@ -17,6 +18,7 @@ const GAMES = {
   'timing-jump': () => require('../games/timing-jump/TimingJumpAdapter'),
   'rhythm-tap': () => require('../games/rhythm-tap/RhythmTapAdapter'),
   'stack-tower': () => require('../games/stack-tower/StackTowerAdapter'),
+  'flappy-bird': () => require('../games/flappy-bird/FlappyBirdAdapter'),
   // 튜토리얼 예제 게임 (examples/ 폴더)
   heartbeat: () => require('../examples/heartbeat/HeartBeatAdapter'),
 };
@@ -42,9 +44,16 @@ function parseArgs(argv) {
 }
 
 function makeBot(args, gameName) {
-  const botType = args.bot || 'random';
+  const botType = args.bot || (gameName === 'flappy-bird' ? 'flappy' : 'random');
   if (botType === 'human') {
     return new HumanLikeBot({
+      accuracy: args['bot.accuracy'] ?? 0.9,
+      reactionMin: args['bot.reactionMin'] ?? 100,
+      reactionMax: args['bot.reactionMax'] ?? 300,
+    });
+  }
+  if (botType === 'flappy') {
+    return new FlappyBirdBot({
       accuracy: args['bot.accuracy'] ?? 0.9,
       reactionMin: args['bot.reactionMin'] ?? 100,
       reactionMax: args['bot.reactionMax'] ?? 300,
@@ -79,8 +88,8 @@ async function runOptimize(args, gameName, GameClass) {
     process.exit(1);
   }
 
-  const botType = args.bot || 'random';
-  const BotClass = botType === 'human' ? HumanLikeBot : RandomBot;
+  const botType = args.bot || (gameName === 'flappy-bird' ? 'flappy' : 'random');
+  const BotClass = botType === 'human' ? HumanLikeBot : botType === 'flappy' ? FlappyBirdBot : RandomBot;
   // 게임 기본 botOptions → 사용자 명시 값으로 덮어쓰기
   const gameDefaultBotOpts = (DEFAULT_PARAMS[gameName] || {}).defaultBotOptions || {};
   const botOptions = { ...gameDefaultBotOpts };
@@ -142,7 +151,7 @@ async function main() {
   // 게임별 기본 flowOptions 자동 적용 (stack-tower의 levelMode 등)
   const gameFlowOptions = (DEFAULT_PARAMS[gameName] || {}).flowOptions || {};
   const meter = new FunMeter({ ticksPerSecond: 60, maxSeconds: 60, ...gameFlowOptions });
-  const result = meter.run(game, bot, runs);
+  const result = meter.run(game, bot, runs, { verbose: runs >= 20 });
   meter.print(result);
 }
 

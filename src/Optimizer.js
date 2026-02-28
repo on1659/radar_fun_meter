@@ -43,6 +43,12 @@ const DEFAULT_PARAMS = {
     max: 0.9,
     hardDirection: 'lower', // 값이 낮을수록 어려움 (정확도 오차 적음)
   },
+  'flappy-bird': {
+    name: 'pipeSpeed',
+    min: 80,
+    max: 300,
+    hardDirection: 'higher', // 값이 높을수록 어려움 (파이프가 빠르게 다가옴)
+  },
 };
 
 class Optimizer {
@@ -98,7 +104,7 @@ class Optimizer {
 
       const game = new GameClass(config);
       const bot = new BotClass(botOptions);
-      const result = meter.run(game, bot, this.runs);
+      const result = meter.run(game, bot, this.runs, { verbose: false }); // Optimizer 실행 시 진행률 숨김
 
       if (this.verbose) {
         const dir = result.zone === 'FLOW' ? '✅' : result.zone === 'TOO_HARD' ? '😵' : '😴';

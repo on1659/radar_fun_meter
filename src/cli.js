@@ -17,6 +17,8 @@ const GAMES = {
   'timing-jump': () => require('../games/timing-jump/TimingJumpAdapter'),
   'rhythm-tap': () => require('../games/rhythm-tap/RhythmTapAdapter'),
   'stack-tower': () => require('../games/stack-tower/StackTowerAdapter'),
+  // 튜토리얼 예제 게임 (examples/ 폴더)
+  heartbeat: () => require('../examples/heartbeat/HeartBeatAdapter'),
 };
 
 function parseArgs(argv) {

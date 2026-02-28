@@ -8,7 +8,8 @@
   },
   "files": [
     "src/",
-    "games/"
+    "games/",
+    "examples/"
   ],
   "keywords": [
     "game",
@@ -29,6 +30,9 @@
     "test:timing-jump": "node src/cli.js --game=timing-jump --runs=100",
     "test:rhythm-tap": "node src/cli.js --game=rhythm-tap --runs=100",
     "test:stack-tower": "node src/cli.js --game=stack-tower --runs=100",
-    "test:all": "node src/cli.js --game=timing-jump --runs=100 && node src/cli.js --game=rhythm-tap --runs=100 && node src/cli.js --game=stack-tower --runs=100"
+    "test:heartbeat": "node src/cli.js --game=heartbeat --runs=100",
+    "test:all": "node src/cli.js --game=example --runs=50 && node src/cli.js --game=timing-jump --runs=50 && node src/cli.js --game=rhythm-tap --runs=50 && node src/cli.js --game=stack-tower --runs=50 && node src/cli.js --game=heartbeat --runs=50",
+    "pack": "npm pack --dry-run",
+    "prepublishOnly": "node --check src/cli.js src/FunMeter.js src/GameAdapter.js src/Optimizer.js src/bots/RandomBot.js src/bots/HumanLikeBot.js && npm run test:example"
   }
 }

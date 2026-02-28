@@ -1,6 +1,8 @@
 # 개발 전용 파일 - npm 배포 시 제외
 memory/
 DESIGN_PROMPT.md
+wake_message.txt
 .git/
 *.log
 .DS_Store
+.gitignore

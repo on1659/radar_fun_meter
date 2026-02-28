@@ -18,6 +18,13 @@ const DEFAULT_PARAMS = {
     max: 400,
     hardDirection: 'higher', // 값이 높을수록 어려움
   },
+  // 튜토리얼 예제: examples/heartbeat/HeartBeatAdapter.js
+  heartbeat: {
+    name: 'drainRate',
+    min: 0.1,
+    max: 3.0,
+    hardDirection: 'higher', // 소모 속도가 높을수록 어려움
+  },
   'stack-tower': {
     name: 'botError',
     min: 2,

@@ -28,6 +28,7 @@ radar_fun_meter — Flow Theory 기반 게임 재미 측정 도구
   --runs=<n>              실행 횟수 (기본: 100)
   --bot=random|human      봇 종류 (기본: random)
   --output=<파일.json>    결과를 JSON 파일로 저장
+  --list-games            사용 가능한 게임 목록 출력
 
 봇 옵션:
   --bot.jumpProb=<0~1>    RandomBot 점프 확률 (기본: 0.05)
@@ -52,6 +53,23 @@ radar_fun_meter — Flow Theory 기반 게임 재미 측정 도구
   funmeter --game=timing-jump --optimize --opt.runs=50
   funmeter --game=example --runs=50 --output=result.json
 `);
+  process.exit(0);
+}
+
+function printListGames() {
+  console.log('\n사용 가능한 게임:');
+  for (const name of Object.keys(GAMES)) {
+    const p = DEFAULT_PARAMS[name];
+    if (!p) {
+      console.log(`  ${name.padEnd(14)}(기본 파라미터 없음)`);
+    } else {
+      const levelTag = p.flowOptions?.levelMode ? '  [레벨 모드]' : '';
+      console.log(
+        `  ${name.padEnd(14)}${p.name} [${p.min}~${p.max}, ${p.hardDirection}]${levelTag}`
+      );
+    }
+  }
+  console.log('');
   process.exit(0);
 }
 
@@ -180,6 +198,7 @@ async function main() {
 
   // --help
   if (args.help) printHelp(); // 내부에서 process.exit(0)
+  if (args['list-games']) printListGames();
 
   const gameName = args.game || 'example';
 

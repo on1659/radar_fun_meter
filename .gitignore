@@ -1,0 +1,13 @@
+# Auto Dev PD v2
+.dev/
+PLAN.md
+IMPL.md
+
+# Node
+node_modules/
+*.log
+npm-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db

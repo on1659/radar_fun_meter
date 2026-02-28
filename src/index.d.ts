@@ -205,3 +205,20 @@ export declare class HumanLikeBot implements Bot {
   decide(game: GameAdapter): string | null;
   reset(): void;
 }
+
+// ─── SmartBot ───────────────────────────────────────────────
+
+export interface SmartBotOptions {
+  /** 장르 힌트 (기본 'auto'). 'auto'는 첫 호출 시 자동 감지 */
+  hint?: 'platformer' | 'rhythm' | 'tower' | 'auto';
+  /** 점수 트렌드 추적 윈도우 틱 수 (기본 60) */
+  scoreWindow?: number;
+}
+
+export declare class SmartBot implements Bot {
+  hint: string;
+  scoreWindow: number;
+  constructor(options?: SmartBotOptions);
+  decide(game: GameAdapter): string | null;
+  reset(): void;
+}

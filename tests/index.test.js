@@ -1,13 +1,14 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 
-test('index.js exports 6개 핵심 심볼', () => {
+test('index.js exports 7개 핵심 심볼', () => {
   const lib = require('../src/index');
   assert.ok(typeof lib.FunMeter === 'function');
   assert.ok(typeof lib.GameAdapter === 'function');
   assert.ok(typeof lib.Optimizer === 'function');
   assert.ok(typeof lib.RandomBot === 'function');
   assert.ok(typeof lib.HumanLikeBot === 'function');
+  assert.ok(typeof lib.SmartBot === 'function');
   assert.ok(typeof lib.DEFAULT_PARAMS === 'object');
 });
 

@@ -10,6 +10,7 @@ const FunMeter = require('./FunMeter');
 const RandomBot = require('./bots/RandomBot');
 const HumanLikeBot = require('./bots/HumanLikeBot');
 const FlappyBirdBot = require('./bots/FlappyBirdBot');
+const SmartBot = require('./bots/SmartBot');
 const { Optimizer, DEFAULT_PARAMS } = require('./Optimizer');
 
 function printHelp() {
@@ -26,7 +27,7 @@ radar_fun_meter — Flow Theory 기반 게임 재미 측정 도구
                           가능한 값: example, timing-jump, rhythm-tap,
                                     stack-tower, flappy-bird, heartbeat
   --runs=<n>              실행 횟수 (기본: 100)
-  --bot=random|human      봇 종류 (기본: random)
+  --bot=random|human|smart  봇 종류 (기본: random)
   --output=<파일>         결과를 파일로 저장 (.json / .html / .md)
   --list-games            사용 가능한 게임 목록 출력
 
@@ -35,6 +36,7 @@ radar_fun_meter — Flow Theory 기반 게임 재미 측정 도구
   --bot.accuracy=<0~1>    HumanLikeBot 정확도 (기본: 0.9)
   --bot.reactionMin=<ms>  반응 지연 최소 (기본: 100)
   --bot.reactionMax=<ms>  반응 지연 최대 (기본: 300)
+  --config.hint=<장르>    SmartBot 장르 힌트 (platformer|rhythm|tower|auto)
 
 게임 파라미터:
   --config.<키>=<값>      게임 생성자에 전달 (예: --config.initialSpeed=120)
@@ -146,6 +148,12 @@ function makeBot(args, gameName) {
       reactionMax: args['bot.reactionMax'] ?? 300,
     });
   }
+  if (botType === 'smart') {
+    return new SmartBot({
+      hint: args.config.hint ?? 'auto',
+      scoreWindow: args.config.scoreWindow ?? 60,
+    });
+  }
   // 게임별 기본 botOptions 적용 (명시적 인자가 우선)
   const gameDefaults = (DEFAULT_PARAMS[gameName] || {}).defaultBotOptions || {};
   const jumpProb = args['bot.jumpProb'] !== undefined
@@ -176,7 +184,10 @@ async function runOptimize(args, gameName, GameClass) {
   }
 
   const botType = args.bot || (gameName === 'flappy-bird' ? 'flappy' : 'random');
-  const BotClass = botType === 'human' ? HumanLikeBot : botType === 'flappy' ? FlappyBirdBot : RandomBot;
+  const BotClass = botType === 'human' ? HumanLikeBot
+                 : botType === 'flappy' ? FlappyBirdBot
+                 : botType === 'smart'  ? SmartBot
+                 : RandomBot;
   // 게임 기본 botOptions → 사용자 명시 값으로 덮어쓰기
   const gameDefaultBotOpts = (DEFAULT_PARAMS[gameName] || {}).defaultBotOptions || {};
   const botOptions = { ...gameDefaultBotOpts };

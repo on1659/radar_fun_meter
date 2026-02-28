@@ -24,6 +24,11 @@ const DEFAULT_PARAMS = {
     max: 40,
     hardDirection: 'higher',    // 값이 높을수록 어려움 (오차 커짐 → 블록 빠르게 소멸)
     defaultBotOptions: { jumpProb: 0 }, // 내부 auto-bot만 사용 (외부 random drop 금지)
+    flowOptions: {              // 레벨 기반 FLOW 판정 (생존 시간보다 적합)
+      levelMode: true,
+      levelFlowMinMedian: 5,
+      levelFlowMaxMedian: 25,
+    },
   },
   'rhythm-tap': {
     name: 'botAccuracy',
@@ -74,6 +79,9 @@ class Optimizer {
     if (this.verbose) {
       console.log(`\n🔍 최적화 시작: ${param.name} ∈ [${param.min}, ${param.max}]`);
       console.log(`   runs/iter=${this.runs}, maxIter=${this.maxIterations}`);
+      if (this.flowOptions.levelMode) {
+        console.log(`   판정 모드: 레벨 기반 (FLOW: ${this.flowOptions.levelFlowMinMedian}~${this.flowOptions.levelFlowMaxMedian}레벨)`);
+      }
       console.log('─'.repeat(50));
     }
 
@@ -87,9 +95,13 @@ class Optimizer {
 
       if (this.verbose) {
         const dir = result.zone === 'FLOW' ? '✅' : result.zone === 'TOO_HARD' ? '😵' : '😴';
+        // 레벨 모드일 때는 레벨 중앙값, 아니면 생존 시간 표시
+        const stat = (result.levelMode && result.levelStats)
+          ? `레벨 중앙값: ${result.levelStats.median.toFixed(1)}`
+          : `중앙값: ${result.median.toFixed(1)}s, timeout: ${(result.timeoutRate * 100).toFixed(0)}%`;
         console.log(
           `  iter ${String(iter).padStart(2)}: ${param.name}=${mid.toFixed(3).padStart(8)}` +
-          ` → ${dir} ${result.zone.padEnd(10)} (중앙값: ${result.median.toFixed(1)}s, timeout: ${(result.timeoutRate * 100).toFixed(0)}%)`
+          ` → ${dir} ${result.zone.padEnd(10)} (${stat})`
         );
       }
 
@@ -134,6 +146,7 @@ class Optimizer {
 
   /**
    * 게임 이름으로 기본 파라미터를 사용해 최적화
+   * 게임별 기본 flowOptions (예: stack-tower의 levelMode)가 자동 적용됨
    * @param {string} gameName
    * @param {Function} GameClass
    * @param {Function} BotClass
@@ -149,7 +162,15 @@ class Optimizer {
     }
     // defaultBotOptions 적용 (호출자 옵션이 우선)
     const mergedBotOptions = { ...(param.defaultBotOptions || {}), ...botOptions };
-    return this.optimize(GameClass, BotClass, mergedBotOptions, param);
+
+    // 게임별 기본 flowOptions 적용 (사용자 지정 flowOptions가 우선)
+    const savedFlowOptions = this.flowOptions;
+    this.flowOptions = { ...(param.flowOptions || {}), ...savedFlowOptions };
+
+    const result = this.optimize(GameClass, BotClass, mergedBotOptions, param);
+
+    this.flowOptions = savedFlowOptions; // 복원
+    return result;
   }
 }
 

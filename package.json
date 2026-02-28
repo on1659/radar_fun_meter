@@ -1,10 +1,28 @@
 {
   "name": "radar_fun_meter",
-  "version": "1.0.0",
-  "description": "Flow Theory 기반 게임 재미 측정 도구",
-  "main": "src/cli.js",
+  "version": "1.2.0",
+  "description": "Flow Theory 기반 게임 재미 측정 도구 — 봇이 게임을 N번 플레이해서 FLOW Zone 자동 판정",
+  "main": "src/FunMeter.js",
   "bin": {
     "funmeter": "./src/cli.js"
+  },
+  "files": [
+    "src/",
+    "games/"
+  ],
+  "keywords": [
+    "game",
+    "balance",
+    "flow-theory",
+    "fun-meter",
+    "difficulty",
+    "bot",
+    "automation",
+    "game-design"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": ">=16.0.0"
   },
   "scripts": {
     "test:example": "node src/cli.js --game=example --runs=100",

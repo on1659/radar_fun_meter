@@ -49,7 +49,7 @@ function makeBot(args, gameName) {
     });
   }
   // 게임별 기본 botOptions 적용 (명시적 인자가 우선)
-  const gameDefaults = (require('./Optimizer').DEFAULT_PARAMS[gameName] || {}).defaultBotOptions || {};
+  const gameDefaults = (DEFAULT_PARAMS[gameName] || {}).defaultBotOptions || {};
   const jumpProb = args['bot.jumpProb'] !== undefined
     ? args['bot.jumpProb']
     : (gameDefaults.jumpProb !== undefined ? gameDefaults.jumpProb : 0.05);
@@ -57,8 +57,6 @@ function makeBot(args, gameName) {
 }
 
 async function runOptimize(args, gameName, GameClass) {
-  const { Optimizer: Opt, DEFAULT_PARAMS: DP } = require('./Optimizer');
-
   const optRuns = args.opt.runs || 50;
   const optIter = args.opt.iter || 20;
 
@@ -71,8 +69,8 @@ async function runOptimize(args, gameName, GameClass) {
       max: args.opt.max ?? 100,
       hardDirection: args.opt.direction ?? 'higher',
     };
-  } else if (DP[gameName]) {
-    param = DP[gameName];
+  } else if (DEFAULT_PARAMS[gameName]) {
+    param = DEFAULT_PARAMS[gameName];
   } else {
     console.error(`❌ '${gameName}'의 기본 최적화 파라미터가 없습니다.`);
     console.error(`   --opt.param, --opt.min, --opt.max, --opt.direction 으로 직접 지정하세요.`);
@@ -82,7 +80,7 @@ async function runOptimize(args, gameName, GameClass) {
   const botType = args.bot || 'random';
   const BotClass = botType === 'human' ? HumanLikeBot : RandomBot;
   // 게임 기본 botOptions → 사용자 명시 값으로 덮어쓰기
-  const gameDefaultBotOpts = (require('./Optimizer').DEFAULT_PARAMS[gameName] || {}).defaultBotOptions || {};
+  const gameDefaultBotOpts = (DEFAULT_PARAMS[gameName] || {}).defaultBotOptions || {};
   const botOptions = { ...gameDefaultBotOpts };
   if (botType === 'human') {
     botOptions.accuracy = args['bot.accuracy'] ?? 0.9;
@@ -92,10 +90,14 @@ async function runOptimize(args, gameName, GameClass) {
     botOptions.jumpProb = 0.05; // 게임 기본값 없으면 기본값 사용
   }
 
+  // 게임별 기본 flowOptions 적용 (stack-tower의 levelMode 등)
+  const gameFlowOptions = (DEFAULT_PARAMS[gameName] || {}).flowOptions || {};
+
   const optimizer = new Optimizer({
     maxIterations: optIter,
     runs: optRuns,
     verbose: true,
+    flowOptions: gameFlowOptions,
   });
 
   console.log(`\n🎮 ${gameName} 최적화 시작 (bot=${botType})`);
@@ -135,7 +137,9 @@ async function main() {
   const game = new GameClass(args.config);
   const bot = makeBot(args, gameName);
 
-  const meter = new FunMeter({ ticksPerSecond: 60, maxSeconds: 60 });
+  // 게임별 기본 flowOptions 자동 적용 (stack-tower의 levelMode 등)
+  const gameFlowOptions = (DEFAULT_PARAMS[gameName] || {}).flowOptions || {};
+  const meter = new FunMeter({ ticksPerSecond: 60, maxSeconds: 60, ...gameFlowOptions });
   const result = meter.run(game, bot, runs);
   meter.print(result);
 }

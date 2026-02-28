@@ -1,11 +1,16 @@
 /**
  * FunMeter - Flow Theory 기반 게임 재미 분석 엔진
  *
- * Flow Zone 판정 기준:
+ * Flow Zone 판정 기준 (시간 모드, 기본):
  * - 생존 시간 분포로 난이도 균형 측정
  * - 너무 빨리 죽음 (중앙값 < 5초) → 너무 어려움
  * - 너무 오래 생존 (타임아웃 > 50%) → 너무 쉬움
  * - 그 사이 → FLOW Zone
+ *
+ * Flow Zone 판정 기준 (레벨 모드, levelMode=true):
+ * - 달성 레벨 중앙값으로 판정 (StackTower 등 레벨 기반 게임에 적합)
+ * - 중앙값 < levelFlowMinMedian → 너무 어려움
+ * - 중앙값 > levelFlowMaxMedian → 너무 쉬움
  */
 class FunMeter {
   constructor(options = {}) {
@@ -13,6 +18,11 @@ class FunMeter {
     this.maxSeconds = options.maxSeconds ?? 60;  // 이 이상 생존하면 "너무 쉬움"
     this.flowMinMedian = options.flowMinMedian ?? 5;   // 중앙값 최소 (초)
     this.flowMaxTimeout = options.flowMaxTimeout ?? 0.5; // 타임아웃 비율 최대
+
+    // 레벨 기반 FLOW 판정 (StackTower 등 레벨이 핵심 지표인 게임)
+    this.levelMode = options.levelMode ?? false;
+    this.levelFlowMinMedian = options.levelFlowMinMedian ?? 5;   // FLOW 최소 레벨 중앙값
+    this.levelFlowMaxMedian = options.levelFlowMaxMedian ?? 25;  // FLOW 최대 레벨 중앙값
   }
 
   /**
@@ -89,23 +99,44 @@ class FunMeter {
         mean: levels.reduce((a, b) => a + b, 0) / levels.length,
         median: this._percentile(sortedLevels, 50),
         max: sortedLevels[sortedLevels.length - 1],
+        p25: this._percentile(sortedLevels, 25),
+        p75: this._percentile(sortedLevels, 75),
       };
     }
 
     // Flow Zone 판정
     let zone, emoji, advice;
-    if (median < this.flowMinMedian) {
-      zone = 'TOO_HARD';
-      emoji = '😵';
-      advice = `너무 어려워. 초기 난이도를 낮춰봐. (중앙값 생존: ${median.toFixed(1)}초)`;
-    } else if (timeoutRate > this.flowMaxTimeout) {
-      zone = 'TOO_EASY';
-      emoji = '😴';
-      advice = `너무 쉬워. 난이도 상승 속도를 높여봐. (타임아웃: ${(timeoutRate*100).toFixed(0)}%)`;
+    if (this.levelMode && levelStats) {
+      // 레벨 기반 판정 (StackTower 등)
+      const lm = levelStats.median;
+      if (lm < this.levelFlowMinMedian) {
+        zone = 'TOO_HARD';
+        emoji = '😵';
+        advice = `너무 어려워. 봇 오차 또는 초기 난이도를 낮춰봐. (중앙값 레벨: ${lm.toFixed(1)})`;
+      } else if (lm > this.levelFlowMaxMedian) {
+        zone = 'TOO_EASY';
+        emoji = '😴';
+        advice = `너무 쉬워. 난이도 상승 속도를 높여봐. (중앙값 레벨: ${lm.toFixed(1)})`;
+      } else {
+        zone = 'FLOW';
+        emoji = '✅';
+        advice = `균형 잘 잡혔어. 레벨 ${this.levelFlowMinMedian}~${this.levelFlowMaxMedian} 범위 유지하면 됨.`;
+      }
     } else {
-      zone = 'FLOW';
-      emoji = '✅';
-      advice = '균형 잘 잡혔어. 난이도 상승 곡선 유지하면 됨.';
+      // 시간 기반 판정 (기본)
+      if (median < this.flowMinMedian) {
+        zone = 'TOO_HARD';
+        emoji = '😵';
+        advice = `너무 어려워. 초기 난이도를 낮춰봐. (중앙값 생존: ${median.toFixed(1)}초)`;
+      } else if (timeoutRate > this.flowMaxTimeout) {
+        zone = 'TOO_EASY';
+        emoji = '😴';
+        advice = `너무 쉬워. 난이도 상승 속도를 높여봐. (타임아웃: ${(timeoutRate*100).toFixed(0)}%)`;
+      } else {
+        zone = 'FLOW';
+        emoji = '✅';
+        advice = '균형 잘 잡혔어. 난이도 상승 곡선 유지하면 됨.';
+      }
     }
 
     return {
@@ -116,6 +147,7 @@ class FunMeter {
       timeoutRate,
       scoreMean, scoreMax,
       levelStats,
+      levelMode: this.levelMode,
       zone, emoji, advice, runs,
     };
   }
@@ -160,7 +192,8 @@ class FunMeter {
    */
   print(result) {
     const bar = '─'.repeat(50);
-    console.log(`\n📊 결과: ${result.name} (${result.runs}회)`);
+    const modeTag = result.levelMode ? ' [레벨 모드]' : '';
+    console.log(`\n📊 결과: ${result.name} (${result.runs}회)${modeTag}`);
     console.log(bar);
 
     console.log(`생존 시간`);
@@ -182,10 +215,11 @@ class FunMeter {
 
     // 레벨 통계 (지원 시)
     if (result.levelStats) {
+      const ls = result.levelStats;
       console.log(`\n레벨`);
-      console.log(`  평균:   ${result.levelStats.mean.toFixed(1)}`);
-      console.log(`  중앙값: ${result.levelStats.median.toFixed(1)}`);
-      console.log(`  최고:   ${result.levelStats.max}`);
+      console.log(`  평균:   ${ls.mean.toFixed(1)}`);
+      console.log(`  중앙값: ${ls.median.toFixed(1)}`);
+      console.log(`  범위:   p25=${ls.p25.toFixed(1)} / p75=${ls.p75.toFixed(1)} / max=${ls.max}`);
     }
 
     console.log(`\n타임아웃: ${(result.timeoutRate * 100).toFixed(0)}%`);

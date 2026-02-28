@@ -37,6 +37,13 @@ function toHTML(result) {
     '  </ul>',
   ].join('\n') : '';
 
+  const deathPatternSection = result.deathPattern ? [
+    '  <h2>사망 패턴</h2>',
+    '  <p>왜도: ' + result.deathPattern.skewness.toFixed(3) +
+      ' · 첨도: ' + result.deathPattern.kurtosis.toFixed(3) +
+      ' · 분포: <strong>' + result.deathPattern.cluster + '</strong></p>',
+  ].join('\n') : '';
+
   const scoreCurveSection = result.scoreCurve ? (function() {
     var sc = result.scoreCurve;
     var maxBucket = Math.max.apply(null, sc.buckets.concat([1]));
@@ -98,6 +105,7 @@ function toHTML(result) {
     '  <p>평균 ' + Math.round(scoreMean) + ' · 최고 ' + scoreMax + '</p>',
     '',
     levelSection,
+    deathPatternSection,
     suggestionsSection,
     scoreCurveSection,
     '  <blockquote>💡 ' + advice + '</blockquote>',

@@ -12,17 +12,33 @@
  * - 중앙값 < levelFlowMinMedian → 너무 어려움
  * - 중앙값 > levelFlowMaxMedian → 너무 쉬움
  */
+
+const GENRE_PRESETS = {
+  action:   { minMedian: 5,  maxTimeoutRate: 0.3 },
+  rhythm:   { minMedian: 10, maxTimeoutRate: 0.4 },
+  puzzle:   { minMedian: 15, maxTimeoutRate: 0.6 },
+  survival: { minMedian: 8,  maxTimeoutRate: 0.2 },
+};
+
 class FunMeter {
   constructor(options = {}) {
     this.ticksPerSecond = options.ticksPerSecond ?? 60;
     this.maxSeconds = options.maxSeconds ?? 60;  // 이 이상 생존하면 "너무 쉬움"
-    this.flowMinMedian = options.flowMinMedian ?? 5;   // 중앙값 최소 (초)
-    this.flowMaxTimeout = options.flowMaxTimeout ?? 0.5; // 타임아웃 비율 최대
+
+    // genre + flowCriteria 병합
+    const preset = GENRE_PRESETS[options.genre] ?? {};
+    const criteria = { ...preset, ...(options.flowCriteria ?? {}) };
+
+    this.flowMinMedian  = criteria.minMedian     ?? options.flowMinMedian  ?? 5;
+    this.flowMaxTimeout = criteria.maxTimeoutRate ?? options.flowMaxTimeout ?? 0.5;
 
     // 레벨 기반 FLOW 판정 (StackTower 등 레벨이 핵심 지표인 게임)
     this.levelMode = options.levelMode ?? false;
     this.levelFlowMinMedian = options.levelFlowMinMedian ?? 5;   // FLOW 최소 레벨 중앙값
     this.levelFlowMaxMedian = options.levelFlowMaxMedian ?? 25;  // FLOW 최대 레벨 중앙값
+
+    // 메타 저장 (print·리포터에서 표시용)
+    this.genre = options.genre ?? null;
   }
 
   /**
@@ -167,10 +183,13 @@ class FunMeter {
       ? this._analyzeScoreCurve(allCurves, this.maxSeconds)
       : null;
 
+    // 사망 패턴 분석
+    const deathPattern = this.computeDeathPattern(times);
+
     // suggestions 생성
     const suggestions = this._generateSuggestions(zone, {
       median, timeoutRate, levelStats,
-      scoreCurve,
+      scoreCurve, deathPattern,
     });
 
     return {
@@ -185,6 +204,7 @@ class FunMeter {
       zone, emoji, advice, runs,
       suggestions,
       scoreCurve,
+      deathPattern,
     };
   }
 
@@ -232,14 +252,50 @@ class FunMeter {
   }
 
   /**
+   * 사망 패턴 분석 (왜도·첨도·클러스터)
+   * @param {number[]} times - 생존 시간 배열
+   * @returns {{ skewness: number, kurtosis: number, cluster: string }}
+   */
+  computeDeathPattern(times) {
+    const n = times.length;
+    if (n < 2) return { skewness: 0, kurtosis: 0, cluster: 'uniform' };
+
+    const mean = times.reduce((a, b) => a + b, 0) / n;
+    const variance = times.reduce((acc, t) => acc + (t - mean) ** 2, 0) / n;
+    const stddev = Math.sqrt(variance);
+
+    if (stddev < 1e-9) {
+      return { skewness: 0, kurtosis: 0, cluster: 'uniform' };
+    }
+
+    // 표본 왜도 (Fisher-Pearson g1)
+    const skewness = n < 3 ? 0
+      : (n / ((n - 1) * (n - 2)))
+        * times.reduce((acc, t) => acc + ((t - mean) / stddev) ** 3, 0);
+
+    // 초과 첨도
+    const kurtosis = (times.reduce((acc, t) => acc + ((t - mean) / stddev) ** 4, 0) / n) - 3;
+
+    const cluster = skewness > 1.0 ? 'early'
+      : skewness < -1.0 ? 'late'
+      : 'uniform';
+
+    return {
+      skewness: Math.round(skewness * 1000) / 1000,
+      kurtosis: Math.round(kurtosis * 1000) / 1000,
+      cluster,
+    };
+  }
+
+  /**
    * 파라미터 조정 제안 생성
    * @param {string} zone - 'TOO_HARD' | 'TOO_EASY' | 'FLOW'
-   * @param {object} stats - { median, timeoutRate, levelStats, scoreCurve }
+   * @param {object} stats - { median, timeoutRate, levelStats, scoreCurve, deathPattern }
    * @returns {string[]}
    */
   _generateSuggestions(zone, stats) {
     const suggestions = [];
-    const { median, timeoutRate, scoreCurve } = stats;
+    const { median, timeoutRate, scoreCurve, deathPattern } = stats;
 
     if (zone === 'TOO_HARD') {
       suggestions.push('초기 난이도를 낮추거나 초반 진입 장벽을 줄여보세요.');
@@ -263,6 +319,13 @@ class FunMeter {
       if (scoreCurve?.pattern === 'EXPONENTIAL') {
         suggestions.push('점수 증가가 후반에 집중됩니다. 초반 보상 구조도 점검해보세요.');
       }
+    }
+
+    // 패턴 기반 추가 제안
+    if (deathPattern?.cluster === 'early') {
+      suggestions.push('초반 사망이 집중됩니다. 첫 10초의 장애물 밀도나 속도를 줄여보세요.');
+    } else if (deathPattern?.cluster === 'late') {
+      suggestions.push('대부분 후반까지 생존합니다. 후반 난이도 상승 구간을 점검하세요.');
     }
 
     return suggestions;
@@ -398,3 +461,4 @@ function generateSuggestions(result, param) {
 
 module.exports = FunMeter;
 module.exports.generateSuggestions = generateSuggestions;
+module.exports.GENRE_PRESETS = GENRE_PRESETS;

@@ -1,5 +1,21 @@
 // ─── 공통 타입 ─────────────────────────────────────────────
 
+/** 사망 패턴 분석 결과 */
+export interface DeathPattern {
+  skewness: number;
+  kurtosis: number;
+  cluster: 'early' | 'uniform' | 'late';
+}
+
+/** 장르 프리셋 이름 */
+export type FlowCriteriaPreset = 'action' | 'rhythm' | 'puzzle' | 'survival';
+
+/** Flow 판정 기준 커스터마이징 */
+export interface FlowCriteria {
+  minMedian?: number;
+  maxTimeoutRate?: number;
+}
+
 /** 히스토그램 버킷 */
 export interface HistogramBucket {
   from: number;
@@ -42,6 +58,7 @@ export interface RunResult {
   emoji: string;
   advice: string;
   runs: number;
+  deathPattern: DeathPattern;
 }
 
 // ─── Bot 인터페이스 ────────────────────────────────────────
@@ -78,7 +95,11 @@ export interface FunMeterOptions {
   levelMode?: boolean;
   levelFlowMinMedian?: number;
   levelFlowMaxMedian?: number;
+  genre?: FlowCriteriaPreset;
+  flowCriteria?: FlowCriteria;
 }
+
+export declare const GENRE_PRESETS: Record<FlowCriteriaPreset, Required<FlowCriteria>>;
 
 export declare class FunMeter {
   ticksPerSecond: number;
@@ -88,6 +109,7 @@ export declare class FunMeter {
   levelMode: boolean;
   levelFlowMinMedian: number;
   levelFlowMaxMedian: number;
+  genre: FlowCriteriaPreset | null;
 
   constructor(options?: FunMeterOptions);
 
@@ -104,6 +126,9 @@ export declare class FunMeter {
     runs?: number,
     options?: { verbose?: boolean }
   ): RunResult;
+
+  /** 사망 패턴 분석 */
+  computeDeathPattern(times: number[]): DeathPattern;
 
   /** 결과를 콘솔에 보기 좋게 출력 */
   print(result: RunResult): void;

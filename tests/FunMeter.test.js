@@ -62,3 +62,82 @@ test('_analyze: 레벨 모드 중앙값 15 → FLOW', () => {
   const r = analyze(m, times, { levels });
   assert.equal(r.zone, 'FLOW');
 });
+
+// T-DP1: skewness — 초반 집중 분포
+test('computeDeathPattern: 초반 집중 → early cluster', () => {
+  const m = new FunMeter();
+  const times = [...Array(90).fill(2), ...Array(10).fill(40)];
+  const dp = m.computeDeathPattern(times);
+  assert.equal(dp.cluster, 'early');
+  assert.ok(dp.skewness > 1.0);
+});
+
+// T-DP2: skewness — 균일 분포
+test('computeDeathPattern: 균일 분포 → uniform cluster', () => {
+  const m = new FunMeter();
+  const times = Array.from({ length: 100 }, (_, i) => 5 + i * 0.5);
+  const dp = m.computeDeathPattern(times);
+  assert.equal(dp.cluster, 'uniform');
+  assert.ok(Math.abs(dp.skewness) <= 1.0);
+});
+
+// T-DP3: skewness — 후반 집중 분포
+test('computeDeathPattern: 후반 집중 → late cluster', () => {
+  const m = new FunMeter();
+  const times = [...Array(10).fill(1), ...Array(90).fill(55)];
+  const dp = m.computeDeathPattern(times);
+  assert.equal(dp.cluster, 'late');
+  assert.ok(dp.skewness < -1.0);
+});
+
+// T-DP4: 단일 값 → skewness 0, cluster uniform
+test('computeDeathPattern: 모두 같은 값 → skewness 0', () => {
+  const m = new FunMeter();
+  const dp = m.computeDeathPattern(Array(50).fill(10));
+  assert.equal(dp.skewness, 0);
+  assert.equal(dp.kurtosis, 0);
+  assert.equal(dp.cluster, 'uniform');
+});
+
+// T-GC1: genre 프리셋 적용
+test('genre=rhythm → flowMinMedian 10, flowMaxTimeout 0.4', () => {
+  const m = new FunMeter({ genre: 'rhythm' });
+  assert.equal(m.flowMinMedian, 10);
+  assert.equal(m.flowMaxTimeout, 0.4);
+});
+
+// T-GC2: flowCriteria가 genre 프리셋 오버라이드
+test('genre=rhythm + flowCriteria.minMedian=12 → 12 사용', () => {
+  const m = new FunMeter({ genre: 'rhythm', flowCriteria: { minMedian: 12 } });
+  assert.equal(m.flowMinMedian, 12);
+  assert.equal(m.flowMaxTimeout, 0.4);
+});
+
+// T-GC3: 기존 옵션 하위 호환
+test('기존 flowMinMedian 옵션 → 그대로 동작', () => {
+  const m = new FunMeter({ flowMinMedian: 7, flowMaxTimeout: 0.35 });
+  assert.equal(m.flowMinMedian, 7);
+  assert.equal(m.flowMaxTimeout, 0.35);
+});
+
+// T-GC4: puzzle 프리셋으로 FLOW 판정 변화
+test('puzzle 프리셋: 중앙값 12s, timeout 40% → TOO_HARD (minMedian 15 미달)', () => {
+  const m = new FunMeter({ genre: 'puzzle' });
+  // 40개 60초 타임아웃 + 60개 12초 사망
+  // sorted: [12×60, 60×40] → 중앙값=12, timeoutRate=40%
+  // puzzle maxTimeoutRate=0.6이므로 timeout 기준은 통과하지만
+  // minMedian=15 미달(12 < 15) → TOO_HARD
+  const times = Array(100).fill(0).map((_, i) => i < 40 ? 60 : 12);
+  const r = analyze(m, times);
+  assert.equal(r.zone, 'TOO_HARD');
+});
+
+// T-INT2: deathPattern이 RunResult에 포함됨
+test('run() 결과에 deathPattern 필드 존재', () => {
+  const m = new FunMeter();
+  const result = analyze(m, Array(50).fill(10));
+  assert.ok(result.deathPattern);
+  assert.ok('skewness' in result.deathPattern);
+  assert.ok('kurtosis' in result.deathPattern);
+  assert.ok(['early', 'uniform', 'late'].includes(result.deathPattern.cluster));
+});

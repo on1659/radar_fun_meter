@@ -29,6 +29,15 @@ function toMarkdown(result) {
     '| p25 / p75 | ' + levelStats.p25.toFixed(1) + ' / ' + levelStats.p75.toFixed(1) + ' |',
   ].join('\n') : '';
 
+  const deathPatternSection = result.deathPattern ? [
+    '',
+    '## 사망 패턴',
+    '',
+    '- 왜도: ' + result.deathPattern.skewness,
+    '- 첨도: ' + result.deathPattern.kurtosis,
+    '- 분포: ' + result.deathPattern.cluster,
+  ].join('\n') + '\n' : '';
+
   const suggestionsSection = (result.suggestions?.length > 0)
     ? '## 제안\n\n' + result.suggestions.map(function(s) { return '- ' + s; }).join('\n') + '\n\n'
     : '';
@@ -53,6 +62,7 @@ function toMarkdown(result) {
     '',
     '평균 **' + Math.round(scoreMean) + '** · 최고 **' + scoreMax + '**',
     levelSection,
+    deathPatternSection,
     '## 분포 히스토그램',
     '',
     '```',

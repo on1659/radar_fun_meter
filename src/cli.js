@@ -38,6 +38,10 @@ radar_fun_meter — Flow Theory 기반 게임 재미 측정 도구
   --port=<n>              서버 포트 (기본: 4567)
   --history               저장된 실행 이력 출력 후 종료
 
+공유 옵션:
+  --share                 결과를 GitHub Gist로 업로드 (FUNMETER_GITHUB_TOKEN 필요)
+  --view=<gist-id>        저장된 Gist 결과 터미널 출력
+
 봇 옵션:
   --bot.jumpProb=<0~1>    RandomBot 점프 확률 (기본: 0.05)
   --bot.accuracy=<0~1>    HumanLikeBot 정확도 (기본: 0.9)
@@ -133,6 +137,12 @@ const GAMES = {
 
 function promptConfirm(question) {
   return new Promise((resolve) => {
+    if (!process.stdin.isTTY) {
+      console.error('⚠️  비대화형 환경 감지. 외부 패키지 로드를 건너뜁니다.');
+      console.error('   --yes 플래그를 사용하면 확인 없이 진행됩니다.');
+      resolve(false);
+      return;
+    }
     const rl = require('readline').createInterface({
       input: process.stdin,
       output: process.stdout,
@@ -317,12 +327,52 @@ async function runOptimize(args, gameName, GameClass) {
   }
 }
 
+async function shareResult(result) {
+  const { uploadGist, GistAuthError, GistUploadError } = require('./reporters/gistReporter');
+  const token = process.env.FUNMETER_GITHUB_TOKEN;
+  try {
+    console.log('📤 Gist 업로드 중...');
+    const { url, id } = await uploadGist(result, { token });
+    console.log(`✅ 공유 완료: ${url}`);
+    console.log(`   터미널 보기: funmeter --view=${id}`);
+  } catch (err) {
+    if (err instanceof GistAuthError) {
+      console.error(`❌ ${err.message}`);
+      console.error('   로컬 저장을 사용하려면: funmeter --output=result.json');
+    } else if (err instanceof GistUploadError) {
+      console.error(`❌ 업로드 실패: ${err.message}`);
+      console.error('   네트워크 오류이면 --output=result.json 으로 저장하세요.');
+    } else {
+      console.error(`❌ 예상치 못한 오류: ${err.message}`);
+    }
+  }
+}
+
 async function main() {
   const args = parseArgs(process.argv);
 
   // --help
   if (args.help) printHelp(); // 내부에서 process.exit(0)
   if (args['list-games']) printListGames();
+
+  // --view=<gist-id>
+  if (args.view) {
+    const { viewGist, GistNotFoundError, GistFormatError } = require('./reporters/gistReporter');
+    const token = process.env.FUNMETER_GITHUB_TOKEN;
+    try {
+      const result = await viewGist(String(args.view), { token });
+      const meter = new FunMeter({ ticksPerSecond: 60, maxSeconds: 60 });
+      meter.print(result);
+    } catch (err) {
+      if (err instanceof GistNotFoundError || err instanceof GistFormatError) {
+        console.error(`❌ ${err.message}`);
+      } else {
+        console.error(`❌ 조회 실패: ${err.message}`);
+      }
+      process.exit(1);
+    }
+    process.exit(0);
+  }
 
   // --history: 저장된 실행 이력 출력
   if (args.history) {
@@ -489,6 +539,7 @@ async function main() {
     srv.saveHistory(result);
     meter.print(result);
     if (args.output) saveResult(args.output, result);
+    if (args.share) await shareResult(result);
     console.log('Ctrl+C 로 서버 종료');
     return;
   }
@@ -505,6 +556,11 @@ async function main() {
 
   // --output
   if (args.output) saveResult(args.output, result);
+
+  // --share: GitHub Gist 업로드
+  if (args.share) {
+    await shareResult(result);
+  }
 }
 
 main().catch(err => {

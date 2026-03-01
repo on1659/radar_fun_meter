@@ -245,3 +245,67 @@ funmeter --game=<이름> [옵션]
 ✅ FLOW Zone! (재밌을 가능성 높음)
 💡 균형 잘 잡혔어. 난이도 상승 곡선 유지하면 됨.
 ```
+## 🤖 Auto Dev PD v2 - TODO 기반 자동 개발
+
+이 프로젝트는 **Auto Dev PD v2** 스킬로 자동 개발되고 있습니다.
+
+### 사용법
+
+1. **새 기능 추가하고 싶을 때:**
+   - 프로젝트 루트에 `TODO.md` 파일 생성
+   - 원하는 기능/수정사항을 자연어로 작성
+
+2. **자동 개발 시작:**
+   - 30분마다 자동 실행 (크론)
+   - TODO.md → Planning → Impl-doc → Coding 자동 진행
+   - 완료 시 TODO.md 자동 삭제
+
+3. **진행 상황 확인:**
+   - `.dev/state.json` - 현재 단계 추적
+   - `.dev/history/` - 과거 계획/구현 문서 백업
+   - `PLAN.md` / `IMPL.md` - 임시 작업 문서 (완료 시 삭제됨)
+
+### TODO.md 예시
+
+```markdown
+# TODO
+
+## CLI 개선
+- `--help` 옵션 추가
+- `--output` JSON 포맷 지원
+- `--list-games` 게임 목록 출력
+
+## 테스트 강화
+- 단위 테스트 추가 (Jest)
+- CI/CD 파이프라인 구성
+
+## 문서화
+- API 레퍼런스 생성
+- 예제 추가
+```
+
+### 작동 방식
+
+```mermaid
+graph LR
+    A[TODO.md 작성] --> B[30분마다 크론 실행]
+    B --> C{TODO.md 있나?}
+    C -->|없음| D[idle - 작업 없음]
+    C -->|있음| E[Planning Phase]
+    E --> F[Impl-doc Phase]
+    F --> G[Coding Phase]
+    G --> H[TODO.md 삭제]
+    H --> I[백업 저장]
+    I --> D
+```
+
+**장점:**
+- ✅ 자동화와 제어의 균형 (TODO 없으면 안 돌음)
+- ✅ 토큰 낭비 방지 (작업 있을 때만 실행)
+- ✅ 히스토리 추적 (.dev/history/)
+- ✅ 다른 프로젝트에도 적용 가능
+
+**팁:**
+- TODO.md는 간결하게 (2~5개 항목)
+- 우선순위 명시하면 Planning 단계에서 반영됨
+- 긴급 작업은 TODO.md 대신 직접 수정 권장

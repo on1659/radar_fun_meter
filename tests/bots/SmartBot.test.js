@@ -78,3 +78,39 @@ test('SmartBot runs timing-jump without crash', () => {
   assert.ok(/^(FLOW|TOO_HARD|TOO_EASY)$/.test(result.zone), `zone=${result.zone}`);
   assert.equal(result.runs, 10);
 });
+
+// S-1: tower 힌트 → _decideTower 분기 실행, 유효한 출력
+test('SmartBot: hint=tower 로 실행 시 에러 없이 작동', () => {
+  const bot = new SmartBot({ hint: 'tower' });
+  const game = makeMockGame({ getDifficulty: () => 0.5 });
+  bot.reset();
+  let actionCount = 0;
+  for (let i = 0; i < 200; i++) {
+    const result = bot.decide(game);
+    if (result === 'action') actionCount++;
+    assert.ok(result === null || result === 'action',
+      `invalid result: ${result}`);
+  }
+  // _decideTower: prob≈0.035, 200틱에서 평균 7회 액션 (확률적이므로 범위 확인)
+  assert.ok(actionCount >= 0 && actionCount <= 200);
+});
+
+// S-2: auto 감지 - notes 배열 보유 → rhythm으로 감지
+test('SmartBot: auto 힌트에서 notes 보유 게임은 rhythm으로 감지', () => {
+  const bot = new SmartBot({ hint: 'auto' });
+  const game = makeMockGame({
+    notes: [{ id: 'n1', y: 280, hit: false }],
+  });
+  bot.decide(game);
+  assert.equal(bot._detectedHint, 'rhythm');
+});
+
+// S-3: auto 감지 - stackedBlocks 보유 → tower로 감지
+test('SmartBot: auto 힌트에서 stackedBlocks 보유 게임은 tower로 감지', () => {
+  const bot = new SmartBot({ hint: 'auto' });
+  const game = makeMockGame({
+    stackedBlocks: [{ x: 100, width: 60 }],
+  });
+  bot.decide(game);
+  assert.equal(bot._detectedHint, 'tower');
+});

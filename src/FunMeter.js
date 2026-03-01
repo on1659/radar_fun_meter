@@ -39,6 +39,9 @@ class FunMeter {
 
     // 메타 저장 (print·리포터에서 표시용)
     this.genre = options.genre ?? null;
+
+    // 진행률 콜백 (서버 SSE 연동용)
+    this.onProgress = options.onProgress ?? null;
   }
 
   /**
@@ -97,6 +100,9 @@ class FunMeter {
         const pct = Math.round(((i + 1) / runs) * 100);
         const bar = '█'.repeat(Math.floor(pct / 5)) + '░'.repeat(20 - Math.floor(pct / 5));
         process.stdout.write(`\r진행: [${bar}] ${pct}% (${i + 1}/${runs})`);
+      }
+      if (this.onProgress) {
+        this.onProgress({ run: i + 1, total: runs, elapsed, score: game.getScore() });
       }
     }
 

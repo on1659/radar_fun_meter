@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>radar_fun_meter 대시보드</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'Segoe UI',Roboto,sans-serif;background:#0f1117;color:#e2e8f0;padding:24px;min-height:100vh}
+  h1{font-size:1.4rem;color:#7dd3fc;margin-bottom:20px;letter-spacing:.04em}
+  h2{font-size:1.1rem;margin:16px 0 8px}
+  section{background:#1e2230;border-radius:10px;padding:18px;margin-bottom:18px}
+  #progress-section{display:flex;align-items:center;gap:14px}
+  progress{width:100%;height:14px;border-radius:7px;overflow:hidden;border:none;flex:1}
+  progress::-webkit-progress-bar{background:#2d3748}
+  progress::-webkit-progress-value{background:linear-gradient(90deg,#3b82f6,#7c3aed);border-radius:7px;transition:width .2s}
+  progress::-moz-progress-bar{background:linear-gradient(90deg,#3b82f6,#7c3aed);border-radius:7px}
+  #run-label{white-space:nowrap;color:#94a3b8;font-size:.85rem;min-width:80px;text-align:right}
+  canvas{display:block;border-radius:6px;background:#151821}
+  #result-section{text-align:center}
+  #zone-badge{font-size:2rem;padding:8px 24px;border-radius:8px;display:inline-block;margin-bottom:12px}
+  .FLOW{background:#064e3b;color:#34d399}
+  .TOO_HARD{background:#4c0519;color:#fb7185}
+  .TOO_EASY{background:#1e3a5f;color:#60a5fa}
+  table{width:100%;border-collapse:collapse;margin-top:8px;font-size:.88rem}
+  td,th{padding:6px 12px;border-bottom:1px solid #2d3748;text-align:left}
+  th{color:#94a3b8;font-weight:500}
+  #history-section h2{margin-bottom:10px}
+  .status-dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;background:#4ade80;animation:pulse 2s infinite}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+  .disconnected{background:#f87171;animation:none}
+</style>
+</head>
+<body>
+<h1>🎮 radar_fun_meter 실시간 대시보드</h1>
+
+<section id="progress-section">
+  <span id="status-dot" class="status-dot"></span>
+  <progress id="bar" value="0" max="100"></progress>
+  <span id="run-label">대기 중...</span>
+</section>
+
+<section>
+  <h2>실시간 점수</h2>
+  <canvas id="live-chart" width="600" height="120"></canvas>
+</section>
+
+<section id="result-section" hidden>
+  <h2 id="zone-badge"></h2>
+  <table id="stats-table">
+    <thead><tr><th>지표</th><th>값</th></tr></thead>
+    <tbody></tbody>
+  </table>
+</section>
+
+<section id="history-section">
+  <h2>최근 실행 비교 (최대 10회)</h2>
+  <canvas id="history-chart" width="600" height="200"></canvas>
+  <p id="no-history" style="color:#64748b;font-size:.85rem;margin-top:8px">히스토리 없음</p>
+</section>
+
+<script>
+(function() {
+  // ── 상태 ────────────────────────────────────────────────
+  const scores   = [];   // 실시간 점수 스파크라인
+  let   total    = 100;
+  const liveCtx  = document.getElementById('live-chart').getContext('2d');
+  const histCtx  = document.getElementById('history-chart').getContext('2d');
+
+  // ── SSE 연결 ─────────────────────────────────────────────
+  const es = new EventSource('/events');
+  const dot = document.getElementById('status-dot');
+
+  es.addEventListener('open', () => {
+    dot.classList.remove('disconnected');
+  });
+  es.addEventListener('error', () => {
+    dot.classList.add('disconnected');
+  });
+
+  es.addEventListener('progress', e => {
+    const d = JSON.parse(e.data);
+    total = d.total;
+    scores.push(d.score);
+    document.getElementById('bar').value = (d.run / d.total) * 100;
+    document.getElementById('run-label').textContent = `${d.run} / ${d.total}`;
+    drawSparkline(liveCtx, scores, document.getElementById('live-chart').width, document.getElementById('live-chart').height);
+  });
+
+  es.addEventListener('result', e => {
+    const r = JSON.parse(e.data);
+    const sec = document.getElementById('result-section');
+    sec.hidden = false;
+    const badge = document.getElementById('zone-badge');
+    const zoneLabel = r.zone === 'FLOW' ? '✅ FLOW Zone' : r.zone === 'TOO_HARD' ? '😵 너무 어려움' : '😴 너무 쉬움';
+    badge.textContent = zoneLabel;
+    badge.className = r.zone;
+    const rows = [
+      ['게임',        r.name ?? '-'],
+      ['중앙값',      r.median != null ? r.median.toFixed(1) + 's' : '-'],
+      ['평균',        r.mean   != null ? r.mean.toFixed(1)   + 's' : '-'],
+      ['타임아웃률',  r.timeoutRate != null ? (r.timeoutRate * 100).toFixed(0) + '%' : '-'],
+      ['p25 / p75',  r.p25 != null ? `${r.p25.toFixed(1)}s / ${r.p75.toFixed(1)}s` : '-'],
+      ['점수 최고',   r.scoreMax ?? '-'],
+    ];
+    const tbody = document.querySelector('#stats-table tbody');
+    tbody.innerHTML = rows.map(([k,v]) => `<tr><td>${k}</td><td>${v}</td></tr>`).join('');
+  });
+
+  // ── 스파크라인 ────────────────────────────────────────────
+  function drawSparkline(ctx, data, W, H) {
+    ctx.clearRect(0, 0, W, H);
+    if (data.length < 2) return;
+    const min = Math.min(...data);
+    const max = Math.max(...data);
+    const range = max - min || 1;
+    const pad = 8;
+    ctx.strokeStyle = '#3b82f6';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    data.forEach((v, i) => {
+      const x = pad + (i / (data.length - 1)) * (W - pad * 2);
+      const y = H - pad - ((v - min) / range) * (H - pad * 2);
+      i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+    });
+    ctx.stroke();
+    // 채우기
+    ctx.fillStyle = 'rgba(59,130,246,0.12)';
+    ctx.lineTo(pad + (W - pad * 2), H - pad);
+    ctx.lineTo(pad, H - pad);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  // ── 히스토리 비교 차트 ────────────────────────────────────
+  fetch('/history').then(r => r.json()).then(entries => {
+    const noHistory = document.getElementById('no-history');
+    if (!entries || entries.length === 0) return;
+    noHistory.style.display = 'none';
+    drawHistoryChart(histCtx, entries);
+  }).catch(() => {});
+
+  function drawHistoryChart(ctx, entries) {
+    const W = ctx.canvas.width;
+    const H = ctx.canvas.height;
+    ctx.clearRect(0, 0, W, H);
+
+    const reversed = [...entries].reverse(); // 오래된 순
+    const n = reversed.length;
+    const barW = Math.min(40, (W - 40) / n - 8);
+    const maxMedian = Math.max(...reversed.map(e => e.result?.median ?? 0), 1);
+    const pad = { top: 20, bottom: 40, left: 20, right: 20 };
+    const chartH = H - pad.top - pad.bottom;
+    const chartW = W - pad.left - pad.right;
+
+    const ZONE_COLOR = { FLOW: '#34d399', TOO_HARD: '#fb7185', TOO_EASY: '#60a5fa' };
+
+    reversed.forEach((entry, i) => {
+      const r = entry.result ?? {};
+      const median = r.median ?? 0;
+      const zone   = r.zone   ?? 'FLOW';
+      const barH   = Math.max(4, (median / maxMedian) * chartH);
+      const x = pad.left + (i / n) * chartW + (chartW / n - barW) / 2;
+      const y = pad.top + chartH - barH;
+
+      ctx.fillStyle = ZONE_COLOR[zone] ?? '#94a3b8';
+      ctx.beginPath();
+      ctx.roundRect(x, y, barW, barH, 3);
+      ctx.fill();
+
+      // 라벨
+      ctx.fillStyle = '#94a3b8';
+      ctx.font = '11px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(median.toFixed(1), x + barW / 2, y - 4);
+
+      // 날짜 (짧게)
+      const date = new Date(entry.savedAt);
+      const label = `${String(date.getMonth()+1).padStart(2,'0')}/${String(date.getDate()).padStart(2,'0')}`;
+      ctx.fillStyle = '#64748b';
+      ctx.fillText(label, x + barW / 2, H - pad.bottom + 14);
+    });
+
+    // Y축 레이블
+    ctx.fillStyle = '#64748b';
+    ctx.font = '11px sans-serif';
+    ctx.textAlign = 'right';
+    ctx.fillText(`${maxMedian.toFixed(0)}s`, pad.left - 4, pad.top + 8);
+    ctx.fillText('0s', pad.left - 4, pad.top + chartH);
+  }
+})();
+</script>
+</body>
+</html>

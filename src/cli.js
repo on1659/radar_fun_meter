@@ -238,6 +238,27 @@ async function main() {
   if (args.help) printHelp(); // 내부에서 process.exit(0)
   if (args['list-games']) printListGames();
 
+  // --history: 저장된 실행 이력 출력
+  if (args.history) {
+    const { FunMeterServer } = require('./server/index');
+    const srv = new FunMeterServer();
+    const entries = srv.getHistory();
+    if (entries.length === 0) {
+      console.log('히스토리 없음 (.funmeter-history/ 디렉터리를 확인하세요)');
+    } else {
+      console.log('\n최근 실행 이력 (최신순):');
+      for (const entry of entries) {
+        const date = new Date(entry.savedAt).toLocaleString('ko-KR');
+        const { name, zone, median } = entry.result || {};
+        console.log(
+          `  ${date}  ${(name || '?').padEnd(14)}  ${(zone || '?').padEnd(10)}  중앙값: ${median != null ? median.toFixed(1) + 's' : '?'}`
+        );
+      }
+    }
+    console.log('');
+    process.exit(0);
+  }
+
   const runs = args.runs || 100;
   const maxSeconds = args.maxSeconds || 60;
 
@@ -336,17 +357,49 @@ async function main() {
     console.warn('⚠️  MLBot: 학습 없이 사용 중. --ml.train 또는 --ml.load 권장');
   }
 
+  // 게임 인스턴스 / 봇 / flowOptions (--serve + 일반 모드 공용)
+  const game = new GameClass(args.config);
+  const bot = makeBot(args, gameName);
+  const gameFlowOptions = (DEFAULT_PARAMS[gameName] || {}).flowOptions || {};
+
+  // --serve: 로컬 HTTP 서버 + 실시간 대시보드
+  if (args.serve) {
+    const { FunMeterServer } = require('./server/index'); // lazy require
+    const srv = new FunMeterServer({ port: args.port ?? 4567 });
+    const { url } = await srv.start();
+    console.log(`🌐 대시보드: ${url}`);
+
+    // 브라우저 자동 열기 (macOS/Linux/Windows 대응)
+    const open = { darwin: 'open', linux: 'xdg-open', win32: 'start' }[process.platform];
+    if (open) require('child_process').spawn(open, [url], { detached: true, stdio: 'ignore' });
+
+    const meter = new FunMeter({
+      ticksPerSecond: 60,
+      maxSeconds: 60,
+      ...gameFlowOptions,
+      onProgress: (data) => srv.sendProgress(data),
+    });
+
+    console.log(`🎮 ${gameName} 테스트 시작... (${runs}회, bot=${args.bot || 'random'})`);
+    if (Object.keys(args.config).length > 0) {
+      console.log(`⚙️  설정:`, args.config);
+    }
+
+    const result = meter.run(game, bot, runs, { verbose: runs >= 20 });
+    srv.sendResult(result);
+    srv.saveHistory(result);
+    meter.print(result);
+    if (args.output) saveResult(args.output, result);
+    console.log('Ctrl+C 로 서버 종료');
+    return;
+  }
+
   // 일반 실행 모드
   console.log(`🎮 ${gameName} 테스트 시작... (${runs}회, bot=${args.bot || 'random'})`);
   if (Object.keys(args.config).length > 0) {
     console.log(`⚙️  설정:`, args.config);
   }
 
-  const game = new GameClass(args.config);
-  const bot = makeBot(args, gameName);
-
-  // 게임별 기본 flowOptions 자동 적용 (stack-tower의 levelMode 등)
-  const gameFlowOptions = (DEFAULT_PARAMS[gameName] || {}).flowOptions || {};
   const meter = new FunMeter({ ticksPerSecond: 60, maxSeconds: 60, ...gameFlowOptions });
   const result = meter.run(game, bot, runs, { verbose: runs >= 20 });
   meter.print(result);

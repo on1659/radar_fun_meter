@@ -26,6 +26,8 @@ radar_fun_meter — Flow Theory 기반 게임 재미 측정 도구
   --game=<이름>           게임 선택 (기본: example)
                           가능한 값: example, timing-jump, rhythm-tap,
                                     stack-tower, flappy-bird, heartbeat
+                          외부 패키지: @scope/radar-game-<name>
+  --yes                   외부 패키지 로드 시 확인 프롬프트 스킵
   --runs=<n>              실행 횟수 (기본: 100)
   --bot=random|human|smart|ml  봇 종류 (기본: random)
   --output=<파일>         결과를 파일로 저장 (.json / .html / .md)
@@ -128,6 +130,73 @@ const GAMES = {
   // 튜토리얼 예제 게임 (examples/ 폴더)
   heartbeat: () => require('../examples/heartbeat/HeartBeatAdapter'),
 };
+
+function promptConfirm(question) {
+  return new Promise((resolve) => {
+    const rl = require('readline').createInterface({
+      input: process.stdin,
+      output: process.stdout,
+    });
+    rl.question(question, (answer) => {
+      rl.close();
+      resolve(answer.trim().toLowerCase() === 'y');
+    });
+  });
+}
+
+/**
+ * 게임 클래스 로드.
+ * - 내장 게임: GAMES 레지스트리에서 동기 로드
+ * - 외부 패키지: require() → import() 순서로 시도
+ * @param {string} gameName  게임 이름 또는 npm 패키지명 (e.g. '@user/radar-game-platformer')
+ * @param {{ yes?: boolean }} args  CLI 인자
+ * @returns {Promise<Function>}  GameAdapter 서브클래스
+ */
+async function loadGame(gameName, args) {
+  // 내장 게임
+  if (GAMES[gameName]) {
+    return GAMES[gameName]();
+  }
+
+  // 외부 패키지 감지
+  const isExternal = gameName.startsWith('@') || gameName.includes('/');
+  if (!isExternal) {
+    console.error(`❌ 알 수 없는 게임: ${gameName}`);
+    console.error(`사용 가능: ${Object.keys(GAMES).join(', ')}`);
+    console.error(`외부 패키지는 @scope/name 또는 패키지명/경로 형식으로 지정하세요.`);
+    process.exit(1);
+  }
+
+  // 사용자 확인 프롬프트
+  if (!args.yes) {
+    const confirmed = await promptConfirm(
+      `외부 패키지 "${gameName}"을 로드합니다. 계속하시겠습니까? (y/N) `
+    );
+    if (!confirmed) {
+      console.log('취소됨.');
+      process.exit(0);
+    }
+  }
+
+  // require() 시도 → ESM import() 폴백
+  try {
+    return require(gameName);
+  } catch (requireErr) {
+    if (requireErr.code === 'MODULE_NOT_FOUND' && requireErr.message.includes(gameName)) {
+      console.error(`❌ 패키지 "${gameName}"를 찾을 수 없습니다.`);
+      console.error(`   npm install ${gameName}  으로 먼저 설치하세요.`);
+      process.exit(1);
+    }
+    // ERR_REQUIRE_ESM 등 → 동적 import() 시도
+    try {
+      const mod = await import(gameName);
+      return mod.default ?? mod;
+    } catch (importErr) {
+      console.error(`❌ 패키지 로드 실패: ${importErr.message}`);
+      process.exit(1);
+    }
+  }
+}
 
 function parseArgs(argv) {
   const args = { config: {}, opt: {}, ml: {} };
@@ -345,13 +414,7 @@ async function main() {
 
   const gameName = args.game || 'example';
 
-  if (!GAMES[gameName]) {
-    console.error(`❌ 알 수 없는 게임: ${gameName}`);
-    console.error(`사용 가능: ${Object.keys(GAMES).join(', ')}`);
-    process.exit(1);
-  }
-
-  const GameClass = GAMES[gameName]();
+  const GameClass = await loadGame(gameName, args);
 
   // --optimize 모드
   if (args.optimize) {

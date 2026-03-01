@@ -1,5 +1,16 @@
 # Changelog
 
+## [2.2.0] - 2026-03-01
+
+### Changed
+- **대시보드 UX 개선** (`src/server/index.js`):
+  - 히스토리 라인 차트: 과거 실행 중앙값 추이를 Canvas로 시각화
+  - Zone 색상 코딩: FLOW(초록), TOO_HARD(빨강), TOO_EASY(파랑)
+  - 반응형 레이아웃: 모바일 뷰포트 대응
+- **CLI `--history` diff 출력**: 직전 실행 대비 중앙값·Zone·타임아웃율 변화 표시
+
+---
+
 ## [2.0.0] - 2026-03-01
 
 ### Added

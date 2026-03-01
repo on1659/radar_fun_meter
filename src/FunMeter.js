@@ -428,6 +428,91 @@ class FunMeter {
   }
 
   /**
+   * Worker threads를 이용한 병렬 실행
+   * @param {string} gameFile  - 절대 경로 (require 가능)
+   * @param {string} botFile   - 절대 경로 (require 가능)
+   * @param {object} gameConfig
+   * @param {object} botOptions
+   * @param {number} runs
+   * @param {number} parallel  - Worker 수
+   * @returns {Promise<object>} _analyze() 결과
+   */
+  async runParallel(gameFile, botFile, gameConfig, botOptions, runs, parallel) {
+    const { Worker } = require('worker_threads');
+    const path = require('path');
+    const workerScript = path.join(__dirname, 'worker', 'runnerWorker.js');
+
+    const maxTicks = this.maxSeconds * this.ticksPerSecond;
+    const CURVE_BUCKETS = 20;
+    const sampleInterval = Math.max(1, Math.floor(maxTicks / CURVE_BUCKETS));
+
+    // runs를 Worker 수로 균등 분배
+    const chunkSize = Math.floor(runs / parallel);
+    const remainder = runs % parallel;
+    const chunks = Array.from({ length: parallel }, (_, i) =>
+      chunkSize + (i < remainder ? 1 : 0)
+    );
+
+    let completedRuns = 0;
+    const allTimes = [], allScores = [], allLevels = [];
+    let totalTimeouts = 0;
+    const allCurves = [];
+
+    const workerPromises = chunks.map((chunkRuns) =>
+      new Promise((resolve, reject) => {
+        const w = new Worker(workerScript, {
+          workerData: {
+            gameFile, botFile, botOptions, gameConfig,
+            runs: chunkRuns, maxTicks, sampleInterval, CURVE_BUCKETS,
+            ticksPerSecond: this.ticksPerSecond,
+          },
+        });
+
+        w.on('message', (msg) => {
+          if (msg.type === 'progress') {
+            completedRuns++;
+            if (this.onProgress) {
+              this.onProgress({ run: completedRuns, total: runs, elapsed: msg.elapsed, score: msg.score });
+            }
+            // 진행률 바 출력
+            if (completedRuns % 10 === 0 || completedRuns === runs) {
+              const pct = Math.round((completedRuns / runs) * 100);
+              const bar = '█'.repeat(Math.floor(pct / 5)) + '░'.repeat(20 - Math.floor(pct / 5));
+              process.stdout.write(`\r진행: [${bar}] ${pct}% (${completedRuns}/${runs})`);
+            }
+          } else if (msg.type === 'result') {
+            resolve(msg);
+          }
+        });
+
+        w.on('error', reject);
+        w.on('exit', (code) => {
+          if (code !== 0) reject(new Error(`Worker 종료 코드: ${code}`));
+        });
+      })
+    );
+
+    const results = await Promise.all(workerPromises);
+    process.stdout.write('\n');
+
+    // 결과 집계
+    for (const r of results) {
+      allTimes.push(...r.times);
+      allScores.push(...r.scores);
+      allLevels.push(...r.levels);
+      totalTimeouts += r.timeouts;
+      allCurves.push(...r.allCurves);
+    }
+
+    // 게임 이름 취득 (인스턴스 없이)
+    const GameClass = require(gameFile);
+    const tempGame = new GameClass(gameConfig);
+    const name = tempGame.getName();
+
+    return this._analyze(name, allTimes, allScores, allLevels, totalTimeouts, runs, allCurves);
+  }
+
+  /**
    * 브라우저 게임을 비동기 폴링 루프로 N번 플레이하고 분석
    * @param {BrowserGameAdapter} browserAdapter
    * @param {BrowserBot} bot

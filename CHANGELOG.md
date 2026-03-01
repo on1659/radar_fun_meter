@@ -1,5 +1,34 @@
 # Changelog
 
+## [3.0.0] - 2026-03-01
+
+### Added
+- **Worker threads 병렬 실행** (`--parallel=N`)
+  - `--parallel=1` (기본값): 기존 동기 루프, 하위 호환 완전 보장
+  - `--parallel=N` (N≥2): Node.js `worker_threads`로 N개 Worker에 runs 균등 분배
+  - 각 Worker는 독립 게임 인스턴스 생성 (팩토리 함수 패턴)
+  - SmartBot/MLBot은 병렬 미지원 — 경고 후 단일 스레드 자동 폴백
+- **`src/worker/runnerWorker.js`**: Worker 스크립트 (게임 로드 → N회 플레이 → 결과 전송)
+- **`FunMeter.runParallel()`**: Worker threads 기반 병렬 실행 메서드
+- **`tests/benchmark.js`**: 단일 vs 병렬 성능 비교 측정 스크립트
+
+---
+
+## [2.3.1] - 2026-03-01
+
+### Added
+- **GitHub Gist 공유** (`src/reporters/gistReporter.js`)
+  - `--share`: 결과를 GitHub Gist로 업로드 (`FUNMETER_GITHUB_TOKEN` 환경변수 필요)
+  - `--view=<gist-id>`: Gist에 저장된 결과를 터미널에서 조회
+  - `GistAuthError`, `GistUploadError`, `GistNotFoundError`, `GistFormatError` 커스텀 오류 클래스
+
+### Fixed
+- **stdin TTY 버그 수정**: 비대화형 환경(CI/파이프)에서 `readline` 오류 발생 문제 수정
+  - `process.stdin.isTTY` 체크 후 비TTY 환경에서 자동 거부 처리
+  - `--yes` 플래그로 비대화형 환경에서도 확인 없이 진행 가능
+
+---
+
 ## [2.2.0] - 2026-03-01
 
 ### Changed

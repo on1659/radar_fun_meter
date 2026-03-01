@@ -124,6 +124,16 @@ function saveResult(filePath, result) {
   }
 }
 
+// Worker 병렬 실행을 위한 게임 파일 경로 맵
+const GAME_FILE_MAP = {
+  example:       '../games/example/ExampleGame',
+  'timing-jump': '../games/timing-jump/TimingJumpAdapter',
+  'rhythm-tap':  '../games/rhythm-tap/RhythmTapAdapter',
+  'stack-tower': '../games/stack-tower/StackTowerAdapter',
+  'flappy-bird': '../games/flappy-bird/FlappyBirdAdapter',
+  heartbeat:     '../examples/heartbeat/HeartBeatAdapter',
+};
+
 // 게임 레지스트리
 const GAMES = {
   example: () => require('../games/example/ExampleGame'),
@@ -551,7 +561,54 @@ async function main() {
   }
 
   const meter = new FunMeter({ ticksPerSecond: 60, maxSeconds: 60, ...gameFlowOptions });
-  const result = meter.run(game, bot, runs, { verbose: runs >= 20 });
+
+  let parallel = args.parallel ? Math.max(1, Math.floor(Number(args.parallel))) : 1;
+
+  // SmartBot / MLBot은 병렬 실행 미지원 → 단일 스레드 폴백
+  const botType = args.bot || 'random';
+  const parallelUnsupportedBots = ['smart', 'ml'];
+  if (parallel >= 2 && parallelUnsupportedBots.includes(botType)) {
+    console.warn(`⚠️  --bot=${botType}은 --parallel과 호환되지 않습니다. 단일 스레드로 실행합니다.`);
+    parallel = 1;
+  }
+
+  let result;
+  if (parallel >= 2) {
+    const path = require('path');
+    // 게임 파일 절대 경로 취득
+    const relGameFile = GAME_FILE_MAP[gameName];
+    if (!relGameFile) {
+      console.error(`❌ '${gameName}'은 --parallel 모드를 지원하지 않습니다. (외부 패키지 제한)`);
+      process.exit(1);
+    }
+    const gameFile = require.resolve(path.resolve(__dirname, relGameFile));
+    // 봇 파일 절대 경로 취득
+    const botTypeMap = {
+      random: path.resolve(__dirname, 'bots/RandomBot.js'),
+      human:  path.resolve(__dirname, 'bots/HumanLikeBot.js'),
+      flappy: path.resolve(__dirname, 'bots/FlappyBirdBot.js'),
+    };
+    const botFile = botTypeMap[botType] ?? botTypeMap.random;
+    // 봇 옵션 구성
+    const gameDefaultBotOpts = (DEFAULT_PARAMS[gameName] || {}).defaultBotOptions || {};
+    const botOptions = { ...gameDefaultBotOpts };
+    if (botType === 'human' || botType === 'flappy') {
+      botOptions.accuracy = args['bot.accuracy'] ?? 0.9;
+      botOptions.reactionMin = args['bot.reactionMin'] ?? 100;
+      botOptions.reactionMax = args['bot.reactionMax'] ?? 300;
+    } else {
+      if (args['bot.jumpProb'] !== undefined) {
+        botOptions.jumpProb = args['bot.jumpProb'];
+      } else if (gameDefaultBotOpts.jumpProb === undefined) {
+        botOptions.jumpProb = 0.05;
+      }
+    }
+    console.log(`🚀 병렬 실행: ${parallel}개 Worker (${runs}회 / Worker당 ~${Math.floor(runs/parallel)}회)`);
+    result = await meter.runParallel(gameFile, botFile, args.config, botOptions, runs, parallel);
+  } else {
+    result = meter.run(game, bot, runs, { verbose: runs >= 20 });
+  }
+
   meter.print(result);
 
   // --output

@@ -198,6 +198,19 @@ class FunMeter {
       scoreCurve, deathPattern,
     });
 
+    // Bootstrap 신뢰구간
+    const [ciLow, ciHigh] = this._bootstrapCI(times);
+    const ciWidth = ciHigh - ciLow;
+    const confidence = {
+      ci95: [
+        Math.round(ciLow * 100) / 100,
+        Math.round(ciHigh * 100) / 100,
+      ],
+      ciWidth: Math.round(ciWidth * 100) / 100,
+      sampleSizeAdequacy: this._sampleAdequacy(runs, ciWidth),
+      recommendedRuns: this._recommendedRuns(stddev),
+    };
+
     return {
       name, times, scores, levels,
       mean, median, min, max, stddev,
@@ -211,6 +224,7 @@ class FunMeter {
       suggestions,
       scoreCurve,
       deathPattern,
+      confidence,
     };
   }
 
@@ -338,6 +352,53 @@ class FunMeter {
   }
 
   /**
+   * Bootstrap 신뢰구간 계산
+   * @param {number[]} data - 원본 배열 (정렬 불필요)
+   * @param {number} B - 리샘플 횟수 (기본 1000)
+   * @returns {[number, number]} [low, high] 95% CI
+   */
+  _bootstrapCI(data, B = 1000) {
+    const n = data.length;
+    const medians = new Float64Array(B);
+    for (let i = 0; i < B; i++) {
+      const sample = new Array(n);
+      for (let j = 0; j < n; j++) {
+        sample[j] = data[Math.floor(Math.random() * n)];
+      }
+      sample.sort((a, b) => a - b);
+      medians[i] = this._percentile(sample, 50);
+    }
+    medians.sort();
+    return [
+      medians[Math.floor(B * 0.025)],
+      medians[Math.floor(B * 0.975)],
+    ];
+  }
+
+  /**
+   * 샘플 크기 적정성 판정
+   * @param {number} runs
+   * @param {number} ciWidth - CI 폭 (high - low)
+   * @returns {'adequate'|'marginal'|'insufficient'}
+   */
+  _sampleAdequacy(runs, ciWidth) {
+    if (runs >= 30 && ciWidth <= 5.0) return 'adequate';
+    if (runs >= 20 || ciWidth <= 10.0) return 'marginal';
+    return 'insufficient';
+  }
+
+  /**
+   * 최소 권장 runs 계산
+   * @param {number} stddev
+   * @param {number} [margin=1.0] - 원하는 CI 반폭 (초)
+   * @returns {number}
+   */
+  _recommendedRuns(stddev, margin = 1.0) {
+    const z = 1.96;
+    return Math.ceil((z * stddev / margin) ** 2);
+  }
+
+  /**
    * 정렬된 배열에서 퍼센타일 값 반환 (선형 보간)
    */
   _percentile(sorted, p) {
@@ -408,6 +469,13 @@ class FunMeter {
     }
 
     console.log(`\n타임아웃: ${(result.timeoutRate * 100).toFixed(0)}%`);
+    if (result.confidence) {
+      const { ci95, sampleSizeAdequacy, recommendedRuns } = result.confidence;
+      console.log(`95% CI:   ${ci95[0].toFixed(1)}s ~ ${ci95[1].toFixed(1)}s`);
+      if (sampleSizeAdequacy !== 'adequate') {
+        console.log(`⚠️  샘플 크기: ${sampleSizeAdequacy} (권장 ${recommendedRuns}회)`);
+      }
+    }
     console.log(bar);
     console.log(`\n${result.emoji} ${result.zone === 'FLOW' ? 'FLOW Zone! (재밌을 가능성 높음)' : result.zone === 'TOO_HARD' ? '너무 어려움' : '너무 쉬움'}`);
     console.log(`💡 ${result.advice}\n`);

@@ -141,3 +141,40 @@ test('run() 결과에 deathPattern 필드 존재', () => {
   assert.ok('kurtosis' in result.deathPattern);
   assert.ok(['early', 'uniform', 'late'].includes(result.deathPattern.cluster));
 });
+
+// T-CI1: CI 포함 여부 — runs=100, 두 값의 균일 분포 (50×8s + 50×10s)
+// 중앙값=9, CI=[8,10] → ciWidth=2 ≤ 5.0 → adequate
+test('confidence: ci95[0] < median < ci95[1], adequate (runs=100)', () => {
+  const m = new FunMeter();
+  // 8s 50개 + 10s 50개: 중앙값=9, bootstrap CI≈[8,10], ciWidth=2
+  const times = Array(50).fill(8).concat(Array(50).fill(10));
+  const r = analyze(m, times);
+  assert.ok(r.confidence, 'confidence 필드 존재');
+  const { ci95, sampleSizeAdequacy } = r.confidence;
+  assert.ok(ci95[0] < r.median, `ci95[0](${ci95[0]}) < median(${r.median})`);
+  assert.ok(r.median < ci95[1], `median(${r.median}) < ci95[1](${ci95[1]})`);
+  assert.equal(sampleSizeAdequacy, 'adequate');
+});
+
+// T-CI2: 작은 샘플 경고 — runs=10, 분산 큰 데이터
+test('confidence: runs=10 + 분산 큰 데이터 → insufficient, recommendedRuns > 10', () => {
+  const m = new FunMeter();
+  const times = Array(5).fill(1).concat(Array(5).fill(60));
+  const r = analyze(m, times);
+  assert.ok(r.confidence, 'confidence 필드 존재');
+  assert.equal(r.confidence.sampleSizeAdequacy, 'insufficient');
+  assert.ok(r.confidence.recommendedRuns > 10, `recommendedRuns(${r.confidence.recommendedRuns}) > 10`);
+});
+
+// T-CI3: CI 단조성 — 분산 작은 A vs 분산 큰 B
+test('confidence: 분산 작은 집합의 ciWidth < 분산 큰 집합의 ciWidth', () => {
+  const m = new FunMeter();
+  const smallVar = Array(50).fill(5);
+  const bigVar = Array.from({ length: 50 }, (_, i) => i + 1);
+  const rA = analyze(m, smallVar);
+  const rB = analyze(m, bigVar);
+  assert.ok(
+    rA.confidence.ciWidth < rB.confidence.ciWidth,
+    `A.ciWidth(${rA.confidence.ciWidth}) < B.ciWidth(${rB.confidence.ciWidth})`
+  );
+});

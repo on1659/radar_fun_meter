@@ -33,6 +33,18 @@ export interface LevelStats {
   p75: number;
 }
 
+/** Bootstrap 신뢰구간 및 샘플 크기 적정성 */
+export interface Confidence {
+  /** 95% 신뢰구간 [low, high] (초 단위) */
+  ci95: [number, number];
+  /** CI 폭 = ci95[1] - ci95[0] */
+  ciWidth: number;
+  /** 샘플 크기 적정성 */
+  sampleSizeAdequacy: 'adequate' | 'marginal' | 'insufficient';
+  /** 현재 CI 폭을 ±1초로 줄이기 위한 권장 runs 수 */
+  recommendedRuns: number;
+}
+
 /** FunMeter.run() 반환값 */
 export interface RunResult {
   name: string;
@@ -59,6 +71,7 @@ export interface RunResult {
   advice: string;
   runs: number;
   deathPattern: DeathPattern;
+  confidence: Confidence;
 }
 
 // ─── Bot 인터페이스 ────────────────────────────────────────

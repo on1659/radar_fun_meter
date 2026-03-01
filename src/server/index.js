@@ -3,6 +3,14 @@ const http = require('http');
 const fs   = require('fs');
 const path = require('path');
 
+function _percentile(sorted, p) {
+  if (sorted.length === 0) return 0;
+  const idx = (p / 100) * (sorted.length - 1);
+  const lo = Math.floor(idx), hi = Math.ceil(idx);
+  if (lo === hi) return sorted[lo];
+  return sorted[lo] + (sorted[hi] - sorted[lo]) * (idx - lo);
+}
+
 /**
  * FunMeterServer — 로컬 HTTP 서버 + SSE 스트리밍 + 히스토리 저장
  *
@@ -128,6 +136,64 @@ class FunMeterServer {
     } catch {
       return [];
     }
+  }
+
+  /**
+   * 히스토리 데이터 기반 트렌드 분석
+   * @param {string} [game] - 게임 이름 필터 (미지정 시 전체)
+   * @returns {{ slope, intercept, outliers, feedback, entries }}
+   */
+  getTrend(game) {
+    let entries = this.getHistory();
+    if (game) entries = entries.filter(e => e.result?.name === game);
+    // 선형 회귀를 위해 오래된 것부터 (oldest first)
+    entries = [...entries].reverse();
+
+    if (entries.length < 3) {
+      return {
+        slope: null,
+        intercept: null,
+        outliers: [],
+        feedback: `데이터 부족 (현재 ${entries.length}개, 최소 3개 필요)`,
+        entries,
+      };
+    }
+
+    const medians = entries.map(e => e.result?.median ?? 0);
+    const n = medians.length;
+
+    // 선형 회귀 (최소자승법)
+    let sumX = 0, sumY = 0, sumXY = 0, sumXX = 0;
+    for (let i = 0; i < n; i++) {
+      sumX += i; sumY += medians[i];
+      sumXY += i * medians[i]; sumXX += i * i;
+    }
+    const slope = (n * sumXY - sumX * sumY) / (n * sumXX - sumX * sumX);
+    const intercept = (sumY - slope * sumX) / n;
+
+    // IQR 기반 이상치 탐지
+    const sorted = [...medians].sort((a, b) => a - b);
+    const q1 = _percentile(sorted, 25);
+    const q3 = _percentile(sorted, 75);
+    const iqr = q3 - q1;
+    const outliers = entries.filter(
+      (e, i) => medians[i] < q1 - 1.5 * iqr || medians[i] > q3 + 1.5 * iqr
+    );
+
+    // 자연어 피드백
+    let feedback;
+    if (slope > 0.5) {
+      feedback = `중앙값 상승 추세 (+${slope.toFixed(2)}초/회) — 최근 난이도가 낮아지고 있음`;
+    } else if (slope < -0.5) {
+      feedback = `중앙값 하락 추세 (${slope.toFixed(2)}초/회) — 최근 난이도가 높아지고 있음`;
+    } else {
+      feedback = `안정적인 추세 (변화량: ${slope.toFixed(2)}초/회)`;
+    }
+    if (outliers.length > 0) {
+      feedback += `\n이상치 ${outliers.length}개 감지됨 (IQR 범위 밖)`;
+    }
+
+    return { slope, intercept, outliers, feedback, entries };
   }
 
   // ─── 내부 ─────────────────────────────────────────────

@@ -431,6 +431,34 @@ async function main() {
     process.exit(0);
   }
 
+  // --trend: 히스토리 트렌드 분석
+  if (args.trend) {
+    const { FunMeterServer } = require('./server/index');
+    const srv = new FunMeterServer();
+    const { slope, feedback, outliers, entries } = srv.getTrend(args.game);
+
+    if (entries.length === 0) {
+      console.log('히스토리 없음 (.funmeter-history/ 를 확인하세요)');
+    } else {
+      console.log('\n📈 히스토리 트렌드 분석');
+      console.log('─'.repeat(50));
+      console.log(`  분석 데이터: ${entries.length}개`);
+      if (slope !== null) {
+        console.log(`  회귀 기울기: ${slope >= 0 ? '+' : ''}${slope.toFixed(3)}초/회`);
+      }
+      console.log(`\n  ${feedback}`);
+      if (outliers.length > 0) {
+        console.log('\n  이상치 목록:');
+        for (const o of outliers) {
+          const date = new Date(o.savedAt).toLocaleString('ko-KR');
+          console.log(`    ${date}  중앙값: ${o.result.median.toFixed(1)}s  zone: ${o.result.zone}`);
+        }
+      }
+    }
+    console.log('');
+    process.exit(0);
+  }
+
   // --history: 저장된 실행 이력 출력
   if (args.history) {
     const { FunMeterServer } = require('./server/index');

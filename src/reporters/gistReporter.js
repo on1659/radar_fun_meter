@@ -8,6 +8,11 @@ class GistUploadError extends Error {}
 class GistNotFoundError extends Error {}
 class GistFormatError extends Error {}
 
+function maskToken(token, str) {
+  if (!token || !str) return str;
+  return str.split(token).join('***');
+}
+
 function httpsRequest(options, body) {
   return new Promise((resolve, reject) => {
     const req = https.request(options, (res) => {
@@ -58,7 +63,8 @@ async function uploadGist(result, { token, description } = {}) {
   }, payload);
 
   if (status !== 201) {
-    throw new GistUploadError(`Gist 업로드 실패 (HTTP ${status}): ${body}`);
+    const safeBody = maskToken(token, body);
+    throw new GistUploadError(`Gist 업로드 실패 (HTTP ${status}): ${safeBody}`);
   }
 
   const data = JSON.parse(body);

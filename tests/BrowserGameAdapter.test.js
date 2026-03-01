@@ -154,3 +154,45 @@ test('reset() resets internal state', async () => {
   assert.equal(adapter._score, 0);
   assert.equal(adapter._alive, true);
 });
+
+// T2-1k: 스크립트 인젝션 패턴 → 생성자 throw (P1-4)
+test('스크립트 인젝션 scoreSelector → 생성자 throw', () => {
+  assert.throws(
+    () => new BrowserGameAdapter({
+      url: 'http://localhost',
+      scoreSelector: '<script>alert(1)</script>',
+    }),
+    /허용되지 않는 패턴/
+  );
+});
+
+// T2-1l: 빈 문자열 셀렉터 → 생성자 throw (P1-4)
+test('빈 deathSelector → 생성자 throw', () => {
+  assert.throws(
+    () => new BrowserGameAdapter({
+      url: 'http://localhost',
+      deathSelector: '',
+    }),
+    /비어 있지 않은 문자열/
+  );
+});
+
+// T2-1m: javascript: 패턴 → 생성자 throw (P1-4)
+test('javascript: 패턴 restartSelector → 생성자 throw', () => {
+  assert.throws(
+    () => new BrowserGameAdapter({
+      url: 'http://localhost',
+      restartSelector: 'javascript:alert(1)',
+    }),
+    /허용되지 않는 패턴/
+  );
+});
+
+// T2-1n: 정상 셀렉터 → 생성자 성공 (P1-4)
+test('정상 셀렉터 → 생성자 성공', () => {
+  assert.doesNotThrow(() => new BrowserGameAdapter({
+    url: 'http://localhost',
+    scoreSelector: '#score',
+    deathSelector: '.game-over',
+  }));
+});

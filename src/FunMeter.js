@@ -468,6 +468,15 @@ class FunMeter {
           },
         });
 
+        // 타임아웃: 지정 시간 초과 시 Worker 강제 종료
+        const timeoutMs = module.exports.WORKER_TIMEOUT_MS;
+        const timer = setTimeout(() => {
+          w.terminate();
+          reject(new Error(`Worker 타임아웃 (${timeoutMs / 1000}초 초과)`));
+        }, timeoutMs);
+
+        const cleanup = () => clearTimeout(timer);
+
         w.on('message', (msg) => {
           if (msg.type === 'progress') {
             completedRuns++;
@@ -481,12 +490,17 @@ class FunMeter {
               process.stdout.write(`\r진행: [${bar}] ${pct}% (${completedRuns}/${runs})`);
             }
           } else if (msg.type === 'result') {
+            cleanup();
             resolve(msg);
+          } else if (msg.type === 'error') {
+            cleanup();
+            reject(new Error(`Worker 에러: ${msg.message}`));
           }
         });
 
-        w.on('error', reject);
+        w.on('error', (err) => { cleanup(); reject(err); });
         w.on('exit', (code) => {
+          cleanup();
           if (code !== 0) reject(new Error(`Worker 종료 코드: ${code}`));
         });
       })
@@ -613,3 +627,4 @@ function generateSuggestions(result, param) {
 module.exports = FunMeter;
 module.exports.generateSuggestions = generateSuggestions;
 module.exports.GENRE_PRESETS = GENRE_PRESETS;
+module.exports.WORKER_TIMEOUT_MS = 5 * 60 * 1000; // 5분 (테스트에서 monkey-patch 가능)

@@ -16,6 +16,18 @@
  *   await adapter.close();
  */
 
+const QUERY_TIMEOUT = 2000; // DOM 쿼리 타임아웃 2초
+
+function validateSelector(selector, fieldName) {
+  if (typeof selector !== 'string' || selector.trim() === '') {
+    throw new Error(`BrowserGameAdapter: ${fieldName}은 비어 있지 않은 문자열이어야 합니다`);
+  }
+  const forbidden = /<script/i.test(selector) || /javascript:/i.test(selector);
+  if (forbidden) {
+    throw new Error(`BrowserGameAdapter: ${fieldName}에 허용되지 않는 패턴이 포함되어 있습니다`);
+  }
+}
+
 class BrowserGameAdapter {
   /**
    * @param {object} config
@@ -50,6 +62,13 @@ class BrowserGameAdapter {
     };
     // _chromium은 내부 전용, config에서 제거
     delete this.config._chromium;
+
+    // 셀렉터 검증
+    validateSelector(this.config.scoreSelector, 'scoreSelector');
+    validateSelector(this.config.deathSelector, 'deathSelector');
+    if (this.config.restartSelector !== null) {
+      validateSelector(this.config.restartSelector, 'restartSelector');
+    }
 
     this._browser = null;
     this._page = null;
@@ -119,7 +138,10 @@ class BrowserGameAdapter {
   async getScore() {
     if (this.config.usePostMessage) return this._score;
     try {
-      const el = await this._page.$(this.config.scoreSelector);
+      const el = await Promise.race([
+        this._page.$(this.config.scoreSelector),
+        new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), QUERY_TIMEOUT)),
+      ]);
       if (!el) return 0;
       const text = await el.innerText();
       return parseFloat(text.replace(/[^0-9.]/g, '')) || 0;
@@ -135,10 +157,13 @@ class BrowserGameAdapter {
   async isAlive() {
     if (this.config.usePostMessage) return this._alive;
     try {
-      const el = await this._page.$(this.config.deathSelector);
+      const el = await Promise.race([
+        this._page.$(this.config.deathSelector),
+        new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), QUERY_TIMEOUT)),
+      ]);
       return el === null;
     } catch {
-      return false;
+      return true; // 타임아웃 시 살아있는 것으로 간주 (안전한 기본값)
     }
   }
 

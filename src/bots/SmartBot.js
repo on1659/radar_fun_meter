@@ -14,6 +14,9 @@ class SmartBot {
     this._detectedHint = null;
   }
 
+  /**
+   * 봇 상태를 초기화합니다. FunMeter.run()이 각 게임마다 호출합니다.
+   */
   reset() {
     this._tick = 0;
     this._scoreHistory = [];
@@ -21,6 +24,12 @@ class SmartBot {
     this._detectedHint = null;
   }
 
+  /**
+   * 현재 게임 상태를 보고 다음 액션을 결정합니다.
+   * 내부적으로 장르를 자동 감지하고 게임 난이도·점수 트렌드를 반영합니다.
+   * @param {object} game - 게임 어댑터 인스턴스
+   * @returns {string|null} 액션 문자열('action') 또는 null
+   */
   decide(game) {
     this._tick++;
 
@@ -43,6 +52,18 @@ class SmartBot {
     if (hint === 'rhythm')     return this._decideRhythm(d, trend);
     if (hint === 'tower')      return this._decideTower(d, trend);
     return this._decideDefault(d, trend);
+  }
+
+  /**
+   * 장르를 자동 감지합니다. game 내부 필드(obstacles/notes/stackedBlocks)를 검사합니다.
+   * @param {object} game
+   * @returns {'platformer'|'rhythm'|'tower'}
+   */
+  _detectGenre(game) {
+    if (game.obstacles && Array.isArray(game.obstacles)) return 'platformer';
+    if (game.notes && Array.isArray(game.notes)) return 'rhythm';
+    if (game.stackedBlocks) return 'tower';
+    return 'platformer';
   }
 
   _getScoreTrend() {

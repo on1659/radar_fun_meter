@@ -28,11 +28,20 @@ class FlappyBirdBot {
     this._lastDecision = 0;
   }
 
+  /**
+   * 봇 상태를 초기화합니다. FunMeter.run()이 각 게임마다 호출합니다.
+   */
   reset() {
     this._pendingTick = null;
     this._lastDecision = 0;
   }
 
+  /**
+   * FlappyBird 게임 상태를 분석해 날개짓 여부를 결정합니다.
+   * 다음 파이프의 간격 중앙 높이를 목표로 반응 지연을 시뮬레이션합니다.
+   * @param {object} game - FlappyBirdAdapter 인스턴스
+   * @returns {string|null} 'action'(날개짓) 또는 null
+   */
   decide(game) {
     // 대기 중인 반응 처리
     if (this._pendingTick !== null) {

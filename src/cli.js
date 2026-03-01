@@ -240,6 +240,52 @@ function parseArgs(argv) {
   return args;
 }
 
+/**
+ * CLI 인자 유효성 검사 (보안 및 안정성)
+ * @param {object} args parseArgs() 반환값
+ */
+function validateArgs(args) {
+  // --port 범위 검증
+  if (args.port !== undefined) {
+    const port = Number(args.port);
+    if (!Number.isInteger(port) || port < 1024 || port > 65535) {
+      console.error(`❌ --port 범위 오류: 1024~65535 사이여야 합니다 (입력: ${args.port})`);
+      process.exit(1);
+    }
+  }
+
+  // --output 경로 검증 (path traversal 방지)
+  if (args.output) {
+    const path = require('path');
+    const resolved = path.resolve(String(args.output));
+    const cwd = process.cwd();
+    if (!resolved.startsWith(cwd + path.sep) && resolved !== cwd) {
+      console.error(`❌ --output 경로 오류: 현재 디렉터리 밖에 저장할 수 없습니다 (${args.output})`);
+      process.exit(1);
+    }
+  }
+
+  // --opt.runs 상한 (10,000회)
+  if (args.opt.runs !== undefined && Number(args.opt.runs) > 10000) {
+    console.error(`❌ --opt.runs 상한 초과: 최대 10000 (입력: ${args.opt.runs})`);
+    process.exit(1);
+  }
+
+  // --opt.iter 상한 (100회)
+  if (args.opt.iter !== undefined && Number(args.opt.iter) > 100) {
+    console.error(`❌ --opt.iter 상한 초과: 최대 100 (입력: ${args.opt.iter})`);
+    process.exit(1);
+  }
+
+  // --config.* 숫자 값 유효성 검사
+  for (const [key, val] of Object.entries(args.config)) {
+    if (typeof val === 'number' && !Number.isFinite(val)) {
+      console.error(`❌ --config.${key} 값이 유효하지 않습니다 (NaN/Infinity 불허)`);
+      process.exit(1);
+    }
+  }
+}
+
 function makeBot(args, gameName) {
   const botType = args.bot || (gameName === 'flappy-bird' ? 'flappy' : 'random');
   if (botType === 'human') {
@@ -360,6 +406,7 @@ async function shareResult(result) {
 
 async function main() {
   const args = parseArgs(process.argv);
+  validateArgs(args);
 
   // --help
   if (args.help) printHelp(); // 내부에서 process.exit(0)

@@ -1,0 +1,37 @@
+// ESM 타입 선언 — CJS index.d.ts를 ESM re-export 형태로 재선언
+export {
+  FunMeter,
+  GameAdapter,
+  RandomBot,
+  HumanLikeBot,
+  SmartBot,
+  FlappyBirdBot,
+  BrowserGameAdapter,
+  BrowserBot,
+  Optimizer,
+  DEFAULT_PARAMS,
+  GENRE_PRESETS,
+  generateSuggestions,
+} from '../index';
+
+export type {
+  FunMeterOptions,
+  RunResult,
+  DeathPattern,
+  FlowCriteria,
+  FlowCriteriaPreset,
+  HistogramBucket,
+  LevelStats,
+  Bot,
+  RandomBotOptions,
+  HumanLikeBotOptions,
+  SmartBotOptions,
+  MLBotOptions,
+  MLBotTrainOptions,
+  BrowserGameAdapterConfig,
+  BrowserBotConfig,
+  BrowserRunOptions,
+  OptimizerParam,
+  OptimizerOptions,
+  OptimizeResult,
+} from '../index';

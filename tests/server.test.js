@@ -181,3 +181,46 @@ test('maxHistory 초과 시 오래된 파일 자동 삭제', () => {
     fs.rmSync(tmpDir, { recursive: true });
   }
 });
+
+// ── TC-8: 클라이언트 disconnect 후 sendProgress 안전성 ───────────────────
+test('클라이언트 disconnect 후 sendProgress 호출해도 예외 없음', async () => {
+  const srv = new FunMeterServer({ port: 0 });
+  const { url } = await srv.start();
+
+  // SSE 연결 후 타임아웃으로 disconnect 시뮬레이션
+  // (서버가 버퍼 이벤트 없을 때 헤더를 즉시 flush 안 하므로 타임아웃 방식 사용)
+  await readSSEEvents(`${url}/events`, 'progress', { count: 999, timeout: 20 });
+
+  // 서버가 disconnect를 감지할 시간
+  await new Promise(r => setTimeout(r, 50));
+
+  // 끊긴 클라이언트에게 전송 → 예외 없어야 함
+  assert.doesNotThrow(() => srv.sendProgress({ run: 1, total: 5, elapsed: 0.5 }));
+
+  srv.stop();
+});
+
+// ── TC-9: 다수 클라이언트 동시 연결 + 브로드캐스트 ─────────────────────
+test('다수 클라이언트 동시 연결 시 모두 동일 이벤트 수신', async () => {
+  const srv = new FunMeterServer({ port: 0 });
+  const { url } = await srv.start();
+
+  // 3개 클라이언트 동시 연결 후 이벤트 수신 대기
+  const clientCount = 3;
+  const promises = Array.from({ length: clientCount }, () =>
+    readSSEEvents(`${url}/events`, 'progress', { count: 1, timeout: 200 })
+  );
+
+  // 모든 클라이언트가 연결될 시간을 준 후 이벤트 전송
+  await new Promise(r => setTimeout(r, 30));
+  srv.sendProgress({ run: 7, total: 10, elapsed: 7.0 });
+
+  const results = await Promise.all(promises);
+  srv.stop();
+
+  // 모든 클라이언트가 이벤트를 받아야 함
+  for (let i = 0; i < clientCount; i++) {
+    assert.ok(results[i].length >= 1, `클라이언트 ${i + 1}이 이벤트를 받지 못함`);
+    assert.equal(results[i][0].run, 7, `클라이언트 ${i + 1}의 데이터가 다름`);
+  }
+});

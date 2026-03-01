@@ -27,9 +27,14 @@ radar_fun_meter — Flow Theory 기반 게임 재미 측정 도구
                           가능한 값: example, timing-jump, rhythm-tap,
                                     stack-tower, flappy-bird, heartbeat
   --runs=<n>              실행 횟수 (기본: 100)
-  --bot=random|human|smart  봇 종류 (기본: random)
+  --bot=random|human|smart|ml  봇 종류 (기본: random)
   --output=<파일>         결과를 파일로 저장 (.json / .html / .md)
   --list-games            사용 가능한 게임 목록 출력
+
+서버 옵션:
+  --serve                 로컬 대시보드 서버 기동 (http://127.0.0.1:4567)
+  --port=<n>              서버 포트 (기본: 4567)
+  --history               저장된 실행 이력 출력 후 종료
 
 봇 옵션:
   --bot.jumpProb=<0~1>    RandomBot 점프 확률 (기본: 0.05)
@@ -37,6 +42,14 @@ radar_fun_meter — Flow Theory 기반 게임 재미 측정 도구
   --bot.reactionMin=<ms>  반응 지연 최소 (기본: 100)
   --bot.reactionMax=<ms>  반응 지연 최대 (기본: 300)
   --config.hint=<장르>    SmartBot 장르 힌트 (platformer|rhythm|tower|auto)
+
+ML 봇 옵션 (--bot=ml):
+  --ml.train              학습 모드 활성화
+  --ml.episodes=<n>       학습 에피소드 수 (기본: 300)
+  --ml.save=<파일>        학습 후 모델 저장 경로
+  --ml.load=<파일>        학습된 모델 로드 경로
+  --ml.epsilon=<0~1>      탐험율 (학습 기본: 0.3, 추론 기본: 0.0)
+  --ml.buckets=<n>        상태 이산화 구간 수 (기본: 10)
 
 게임 파라미터:
   --config.<키>=<값>      게임 생성자에 전달 (예: --config.initialSpeed=120)
@@ -56,6 +69,10 @@ radar_fun_meter — Flow Theory 기반 게임 재미 측정 도구
   funmeter --game=example --runs=50 --output=result.json
   funmeter --game=timing-jump --runs=50 --output=report.html
   funmeter --game=stack-tower --runs=50 --output=report.md
+  funmeter --game=timing-jump --serve --runs=100
+  funmeter --history
+  funmeter --game=example --bot=ml --ml.train --ml.episodes=500 --ml.save=model.json
+  funmeter --game=example --bot=ml --ml.load=model.json --runs=100
 `);
   process.exit(0);
 }

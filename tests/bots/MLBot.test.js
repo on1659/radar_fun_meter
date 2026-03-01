@@ -151,3 +151,57 @@ test('학습된 MLBot을 FunMeter로 실행해도 충돌 없음', () => {
   assert.ok(/^(FLOW|TOO_HARD|TOO_EASY)$/.test(result.zone));
   assert.equal(result.runs, 10);
 });
+
+// ──────────────────────────────────────────
+// 시나리오 9: train() 후 greedy 모드에서 결정론적 행동
+// ──────────────────────────────────────────
+test('train() 후 epsilon=0 모드에서 동일 상태는 동일 행동 반환', () => {
+  const bot = new MLBot({ epsilon: 0.3, buckets: 5 });
+  const game = new ExampleGame();
+  bot.train(game, 50);
+  bot.epsilon = 0.0;
+
+  // 재현 가능한 상태로 이동
+  game.reset();
+  for (let i = 0; i < 10; i++) game.update(null);
+
+  const first = bot.decide(game);
+  for (let i = 1; i < 10; i++) {
+    assert.equal(bot.decide(game), first, `${i}번째 호출이 달라짐`);
+  }
+});
+
+// ──────────────────────────────────────────
+// 시나리오 10: 미학습 상태에서 decide() 안전성
+// ──────────────────────────────────────────
+test('미학습 MLBot의 decide()가 예외 없이 유효한 행동 반환', () => {
+  const bot = new MLBot({ actions: ['action', null] });
+  const game = makeMockGame();
+  // 예외 없이 호출되어야 하고, 반환값이 actions에 포함되어야 함
+  assert.doesNotThrow(() => {
+    for (let i = 0; i < 20; i++) {
+      const a = bot.decide(game);
+      assert.ok(a === 'action' || a === null, `유효하지 않은 action: ${a}`);
+    }
+  });
+});
+
+// ──────────────────────────────────────────
+// 시나리오 11: save()/load() 후 동일 결정
+// ──────────────────────────────────────────
+test('save()/load() 후 동일 게임 상태에서 동일 결정', () => {
+  const bot = new MLBot({ epsilon: 0.3, buckets: 5 });
+  const game = new ExampleGame();
+  bot.train(game, 50);
+  bot.epsilon = 0.0;
+
+  const tmpPath = path.join(os.tmpdir(), `mlbot-decide-${Date.now()}.json`);
+  bot.save(tmpPath);
+  const loaded = MLBot.load(tmpPath);
+
+  game.reset();
+  for (let i = 0; i < 5; i++) game.update(null);
+
+  assert.equal(loaded.decide(game), bot.decide(game), '로드 후 결정이 달라짐');
+  fs.unlinkSync(tmpPath);
+});

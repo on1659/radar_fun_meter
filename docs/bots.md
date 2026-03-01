@@ -136,6 +136,113 @@ meter.print(result);
 
 ---
 
+## MLBot (Q-Learning)
+
+ε-greedy Q-Learning으로 게임을 스스로 학습하는 강화학습 봇.
+학습 후 저장된 Q-테이블을 불러와 추론 전용으로 사용할 수 있다.
+
+### 기본 사용법
+
+```js
+const { MLBot } = require('radar-fun-meter');
+const ExampleGame = require('radar-fun-meter/games/example/ExampleGame');
+
+const game = new ExampleGame();
+const bot = new MLBot({ epsilon: 0.3, buckets: 10 });
+
+// 학습
+bot.train(game, 300);
+
+// 추론 (탐험 끔)
+bot.epsilon = 0.0;
+const action = bot.decide(game);
+```
+
+### 생성자 옵션
+
+| 옵션 | 타입 | 기본값 | 설명 |
+|------|------|--------|------|
+| `epsilon` | `number` | `0.0` | 탐험율 (0=순수추론) |
+| `buckets` | `number` | `10` | 상태 차원당 이산화 구간 수 |
+| `alpha` | `number` | `0.1` | 학습률 |
+| `gamma` | `number` | `0.9` | 할인율 |
+| `actions` | `(string\|null)[]` | `['action', null]` | 가능한 행동 목록 |
+| `scoreScale` | `number` | `100` | 점수 정규화 분모 |
+
+### train() 옵션
+
+```js
+bot.train(game, episodes, {
+  epsilonStart: 0.3,   // 초기 탐험율
+  epsilonEnd:   0.05,  // 최소 탐험율 (감쇠 하한)
+  epsilonDecay: 0.995, // 에피소드당 감쇠율
+  maxTicks:     3600,  // 에피소드 최대 틱 수
+  verbose:      false, // 100 에피소드마다 로그 출력
+});
+```
+
+### 모델 저장 / 로드
+
+```js
+// 학습 후 저장
+bot.save('model.json');
+
+// 저장된 모델 로드
+const loaded = MLBot.load('model.json', { epsilon: 0.0 });
+```
+
+### getStateVector() 커스텀 훅
+
+게임이 `getStateVector()` 메서드를 구현하면 MLBot이 이를 상태 벡터로 우선 사용한다.
+미구현 시 `[score/scoreScale, difficulty]` 2차원 폴백 사용.
+
+```js
+class MyGame extends GameAdapter {
+  getStateVector() {
+    return [this.distToObstacle / 400, this.speed / 300, this.playerY / 300];
+  }
+}
+```
+
+### FunMeter와 함께
+
+```js
+const { FunMeter, MLBot } = require('radar-fun-meter');
+const ExampleGame = require('radar-fun-meter/games/example/ExampleGame');
+
+const bot = new MLBot({ epsilon: 0.3 });
+bot.train(new ExampleGame(), 500);
+bot.epsilon = 0.0;
+
+const meter = new FunMeter({ maxSeconds: 30 });
+const result = meter.run(new ExampleGame(), bot, 100);
+meter.print(result);
+```
+
+### CLI에서 MLBot
+
+```bash
+# 학습 + 측정
+funmeter --game=example --bot=ml --ml.train --ml.episodes=500 --ml.save=model.json
+
+# 저장된 모델로 측정
+funmeter --game=example --bot=ml --ml.load=model.json --runs=100
+
+# 탐험율 조정
+funmeter --game=timing-jump --bot=ml --ml.load=model.json --ml.epsilon=0.1
+```
+
+**언제 사용:**
+- 게임 최적 전략을 자동으로 탐색할 때
+- 커스텀 게임에 특화된 봇을 학습시킬 때
+- 인간 봇 대비 상한 성능 측정이 필요할 때
+
+**주의사항:**
+- 상태 공간이 크면 학습이 느려짐 → `buckets` 값을 낮추거나 `getStateVector()`로 핵심 특징만 추출
+- 미학습(train 없이) 상태에서 `decide()`는 랜덤 행동 (epsilon=기본값)
+
+---
+
 ## 커스텀 봇 작성
 
 ### 최소 봇 구현 (10줄)

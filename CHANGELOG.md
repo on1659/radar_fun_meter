@@ -1,5 +1,36 @@
 # Changelog
 
+## [2.0.0] - 2026-03-01
+
+### Added
+- **FunMeterServer** (`src/server/index.js`): 로컬 HTTP 서버 + SSE 실시간 스트리밍
+  - `GET /` → 웹 대시보드 (Canvas 라이브 차트)
+  - `GET /events` → SSE 스트림 (`progress` / `result` 이벤트)
+  - `GET /history` → 최근 실행 이력 JSON (기본 최대 10개)
+- **히스토리 저장**: `.funmeter-history/` 디렉터리 자동 생성 및 JSON 저장
+- **CLI `--serve`**: 실행 중 대시보드 기동 + 브라우저 자동 열기
+- **CLI `--port=<n>`**: 서버 포트 지정 (기본: 4567)
+- **CLI `--history`**: 저장된 이력 터미널 출력 후 종료
+
+---
+
+## [1.5.0] - 2026-02-28
+
+### Added
+- **MLBot** (`src/bots/MLBot.js`): ε-greedy Q-Learning 범용 강화학습 봇
+  - `train(game, episodes, options)`: 자체 학습 루프 (엡실론 감쇠 지원)
+  - `decide(game)`: 이산화 상태 기반 greedy 행동 선택
+  - `save(filePath)`: Q-테이블 + 하이퍼파라미터 JSON 저장
+  - `MLBot.load(filePath, options)`: 저장된 모델 로드
+  - `game.getStateVector()` 훅: 게임이 구현 시 커스텀 상태 벡터 사용
+- **examples/pretrained/train.js**: timing-jump 사전학습 실행 스크립트
+- **CLI `--bot=ml`**: MLBot 사용
+  - `--ml.train`, `--ml.episodes=<n>`: 학습 모드
+  - `--ml.save=<파일>`, `--ml.load=<파일>`: 모델 저장/로드
+  - `--ml.epsilon=<0~1>`, `--ml.buckets=<n>`: 하이퍼파라미터 조정
+
+---
+
 ## [1.4.0] - 2026-03-01
 
 ### Added

@@ -66,6 +66,42 @@ describe('htmlReporter', function() {
     const html = toHTML(resultWithLevel);
     assert.ok(html.includes('<h2>레벨</h2>'), 'levelStats 있을 때 레벨 h2 포함되어야 함');
   });
+
+  // T-HR9: deathPattern 있을 때 사망 패턴 섹션 포함
+  test('deathPattern 있을 때 사망 패턴 섹션 포함', function() {
+    const result = Object.assign({}, mockResult, {
+      deathPattern: { skewness: 0.412, kurtosis: -0.231, cluster: 'early' },
+    });
+    const html = toHTML(result);
+    assert.ok(html.includes('사망 패턴'), '사망 패턴 h2 포함되어야 함');
+    assert.ok(html.includes('0.412'), '왜도 값 포함되어야 함');
+  });
+
+  // T-HR10: scoreCurve 있을 때 점수 곡선 섹션 포함
+  test('scoreCurve 있을 때 점수 곡선 섹션 포함', function() {
+    const result = Object.assign({}, mockResult, {
+      scoreCurve: {
+        buckets: [10, 20, 30, 25, 15, 10, 8, 5, 3, 2,
+                  1,  1,  1,  1,  1,  1,  1, 1, 1, 1],
+        pattern: 'rising',
+        growth1H: 12.5,
+        growth2H: 3.2,
+      },
+    });
+    const html = toHTML(result);
+    assert.ok(html.includes('점수 곡선'), '점수 곡선 h2 포함되어야 함');
+    assert.ok(html.includes('rising'), 'pattern 포함되어야 함');
+  });
+
+  // T-HR11: suggestions 배열 있을 때 제안 섹션 포함
+  test('suggestions 있을 때 제안 섹션 포함', function() {
+    const result = Object.assign({}, mockResult, {
+      suggestions: ['초반 난이도 낮추기', '점프 판정 완화'],
+    });
+    const html = toHTML(result);
+    assert.ok(html.includes('제안'), '제안 h2 포함되어야 함');
+    assert.ok(html.includes('초반 난이도 낮추기'), '제안 내용 포함되어야 함');
+  });
 });
 
 describe('mdReporter', function() {

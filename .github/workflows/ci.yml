@@ -19,11 +19,11 @@ jobs:
           node-version: ${{ matrix.node-version }}
       - run: npm ci
       - run: npm test
-      - name: Run tests with coverage
+      - name: Run tests with coverage gate
         if: matrix.node-version == 20
         run: npm run test:coverage
       - name: Upload coverage to summary
-        if: matrix.node-version == 20
+        if: ${{ always() && matrix.node-version == 20 }}
         run: |
           echo "## Coverage Report" >> $GITHUB_STEP_SUMMARY
           npx c8 report --reporter=text >> $GITHUB_STEP_SUMMARY 2>&1 || true

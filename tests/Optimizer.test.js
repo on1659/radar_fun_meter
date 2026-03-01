@@ -55,3 +55,133 @@ test('Optimizer: FLOW 판정 시 found=true 반환', () => {
   const { found } = opt.optimize(Game, NopBot, {}, PARAM);
   assert.equal(found, true);
 });
+
+// OPT-1: optimizeByName() — timing-jump 기본 파라미터 사용
+test('OPT-1: optimizeByName timing-jump uses DEFAULT_PARAMS', () => {
+  const MockGame = makeMockGame(1); // 1초 생존
+  const opt = new Optimizer({ maxIterations: 3, runs: 10, verbose: false });
+  const result = opt.optimizeByName('timing-jump', MockGame, NopBot);
+  // initialSpeed가 80~400 범위 내에 있어야 함
+  assert.ok(result.config.initialSpeed >= 80, `initialSpeed >= 80, 실제: ${result.config.initialSpeed}`);
+  assert.ok(result.config.initialSpeed <= 400, `initialSpeed <= 400, 실제: ${result.config.initialSpeed}`);
+  assert.ok('found' in result);
+});
+
+// OPT-2: optimizeByName() — stack-tower defaultBotOptions 병합
+test('OPT-2: optimizeByName stack-tower merges defaultBotOptions', () => {
+  let capturedBotOptions;
+  class BotCapture {
+    constructor(opts) { capturedBotOptions = opts; }
+    reset() {}
+    decide() { return false; }
+  }
+  const MockGame = makeMockGame(1);
+  const opt = new Optimizer({ maxIterations: 2, runs: 5, verbose: false });
+  opt.optimizeByName('stack-tower', MockGame, BotCapture);
+  assert.equal(capturedBotOptions.jumpProb, 0);
+});
+
+// OPT-3: hardDirection='lower' — rhythm-tap 반전 탐색
+test('OPT-3: lower hardDirection inverts search on TOO_HARD', () => {
+  const HardGame = makeMockGame(1); // 1초 생존 → TOO_HARD (항상)
+  const opt = new Optimizer({ maxIterations: 5, runs: 10, verbose: false });
+  const result = opt.optimize(HardGame, NopBot, {}, {
+    name: 'botAccuracy', min: 0.05, max: 0.9,
+    hardDirection: 'lower'
+  });
+  // TOO_HARD + lower: low = mid → 탐색이 [0.475, 0.9] 방향으로 이동
+  assert.ok(result.config.botAccuracy > 0.475,
+    `기대: botAccuracy > 0.475, 실제: ${result.config.botAccuracy}`);
+});
+
+// OPT-4: 수렴 threshold — |hi - lo| < 0.001 조기 종료
+test('OPT-4: converges early when |hi-lo| < 0.001', () => {
+  const logs = [];
+  const origLog = console.log;
+  console.log = (...args) => logs.push(args.join(' '));
+
+  const HardGame = makeMockGame(1); // 항상 TOO_HARD
+  const opt = new Optimizer({ maxIterations: 50, runs: 5, verbose: true });
+  opt.optimize(HardGame, NopBot, {}, {
+    name: 'speed', min: 100.0, max: 100.0001,
+    hardDirection: 'higher'
+  });
+
+  console.log = origLog;
+  // 수렴 완료 메시지 확인 (Optimizer.js line 141)
+  assert.ok(logs.some(l => l.includes('수렴')), `수렴 완료 로그 없음`);
+});
+
+// OPT-5: verbose: true — 로그 출력 경로
+test('OPT-5: verbose=true logs iteration progress', () => {
+  const logs = [];
+  const origLog = console.log;
+  console.log = (...args) => logs.push(args.join(' '));
+
+  const opt = new Optimizer({ maxIterations: 2, runs: 5, verbose: true });
+  opt.optimize(makeMockGame(1), NopBot, {}, {
+    name: 'speed', min: 80, max: 400, hardDirection: 'higher'
+  });
+
+  console.log = origLog;
+  assert.ok(logs.length > 0, 'console.log가 호출되어야 함');
+  assert.ok(logs.some(l => l.includes('speed')), '파라미터 이름이 로그에 있어야 함');
+});
+
+// OPT-6: optimizeByName() — 알 수 없는 게임명 에러
+test('OPT-6: optimizeByName throws on unknown game', () => {
+  const opt = new Optimizer({ maxIterations: 2 });
+  assert.throws(
+    () => opt.optimizeByName('nonexistent-game', makeMockGame(1), NopBot),
+    { message: /기본 최적화 파라미터가 없습니다/ }
+  );
+});
+
+// OPT-7: FLOW 즉시 수렴 — found: true 반환 확인
+test('OPT-7: returns found=true on immediate FLOW', () => {
+  const opt = new Optimizer({
+    maxIterations: 10, runs: 10, verbose: false,
+    flowOptions: { flowMinMedian: 5, flowMaxTimeout: 0.9 } // 넓은 FLOW 기준
+  });
+  const FlowGame = makeMockGame(10); // 10초 생존 → FLOW
+  const result = opt.optimize(FlowGame, NopBot, {}, {
+    name: 'speed', min: 80, max: 400, hardDirection: 'higher'
+  });
+  assert.equal(result.found, true);
+});
+
+// OPT-8: verbose=true + FLOW 발견 → "Flow Zone 발견!" 로그 출력 (line 148-149 커버)
+test('OPT-8: verbose=true logs Flow Zone found on FLOW result', () => {
+  const logs = [];
+  const origLog = console.log;
+  console.log = (...args) => logs.push(args.join(' '));
+
+  const opt = new Optimizer({
+    maxIterations: 10, runs: 10, verbose: true,
+    flowOptions: { flowMinMedian: 5, flowMaxTimeout: 0.9 }
+  });
+  opt.optimize(makeMockGame(10), NopBot, {}, {
+    name: 'speed', min: 80, max: 400, hardDirection: 'higher'
+  });
+
+  console.log = origLog;
+  assert.ok(logs.some(l => l.includes('Flow Zone')), 'Flow Zone 발견 로그 있어야 함');
+});
+
+// OPT-9: verbose=true + levelMode=true → 레벨 판정 모드 로그 출력 (line 96-97 커버)
+test('OPT-9: verbose=true with levelMode logs level-based mode', () => {
+  const logs = [];
+  const origLog = console.log;
+  console.log = (...args) => logs.push(args.join(' '));
+
+  const opt = new Optimizer({
+    maxIterations: 2, runs: 5, verbose: true,
+    flowOptions: { levelMode: true, levelFlowMinMedian: 5, levelFlowMaxMedian: 25 }
+  });
+  opt.optimize(makeMockGame(1), NopBot, {}, {
+    name: 'speed', min: 80, max: 400, hardDirection: 'higher'
+  });
+
+  console.log = origLog;
+  assert.ok(logs.some(l => l.includes('레벨 기반')), '레벨 기반 판정 모드 로그 있어야 함');
+});

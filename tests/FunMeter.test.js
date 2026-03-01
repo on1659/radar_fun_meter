@@ -1,6 +1,7 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const FunMeter = require('../src/FunMeter');
+const { generateSuggestions } = require('../src/FunMeter');
 
 // helper: times 배열로 _analyze 호출
 function analyze(meter, times, { levels = [], timeouts = null } = {}) {
@@ -177,4 +178,188 @@ test('confidence: 분산 작은 집합의 ciWidth < 분산 큰 집합의 ciWidth
     rA.confidence.ciWidth < rB.confidence.ciWidth,
     `A.ciWidth(${rA.confidence.ciWidth}) < B.ciWidth(${rB.confidence.ciWidth})`
   );
+});
+
+// ─── 헬퍼: print() 호출에 필요한 전체 필드를 포함하는 fake result 생성 ───
+function makeFakePrintResult(overrides = {}) {
+  return {
+    name: 'TestGame',
+    runs: 10,
+    levelMode: false,
+    mean: 10.0, stddev: 2.0, median: 10.0,
+    min: 5.0, max: 15.0,
+    p25: 8.0, p75: 12.0, p90: 14.0,
+    histogram: [{ from: 0, to: 30, count: 10, bar: '██' }],
+    scoreMean: 500, scoreMax: 1000,
+    timeoutRate: 0.1,
+    zone: 'FLOW',
+    emoji: '🎮',
+    advice: '적당한 난이도입니다.',
+    suggestions: [],
+    confidence: null,
+    levelStats: null,
+    scoreCurve: null,
+    ...overrides
+  };
+}
+
+// ─── 헬퍼: jest.fn() 없이 직접 구현한 MockBrowserAdapter ───
+function createMockBrowserAdapter({ survivalSeconds = 2, scorePerTick = 10 } = {}) {
+  let elapsed = 0;
+  let alive = true;
+  const adapter = {
+    initCount: 0,
+    closeCount: 0,
+    init: async () => { adapter.initCount++; },
+    close: async () => { adapter.closeCount++; },
+    reset: async () => { elapsed = 0; alive = true; },
+    update: async () => { elapsed += 0.05; if (elapsed >= survivalSeconds) alive = false; },
+    isAlive: async () => alive,
+    getScore: async () => elapsed * scorePerTick,
+    getName: () => 'MockBrowser',
+    getDifficulty: async () => 5,
+    getLevel: async () => null,
+  };
+  return adapter;
+}
+
+// FM-SC-1: print() — scoreCurve 있을 때 출력
+test('FM-SC-1: print() outputs scoreCurve when present', () => {
+  const meter = new FunMeter({ runs: 10, maxSeconds: 30 });
+  const logs = [];
+  const origLog = console.log;
+  console.log = (...args) => logs.push(args.join(' '));
+
+  const fakeResult = makeFakePrintResult({
+    scoreCurve: { pattern: 'ACCELERATING', growth1H: 5.2, growth2H: 9.8 }
+  });
+  meter.print(fakeResult);
+
+  console.log = origLog;
+  const allOutput = logs.join('\n');
+  assert.ok(allOutput.includes('ACCELERATING'), '점수 곡선 패턴이 출력되어야 함');
+  assert.ok(allOutput.includes('5.2'), '성장률이 출력되어야 함');
+});
+
+// FM-SC-2: print() — scoreCurve 없을 때 해당 줄 출력 안 함
+test('FM-SC-2: print() skips scoreCurve block when absent', () => {
+  const meter = new FunMeter({ runs: 10 });
+  const logs = [];
+  const origLog = console.log;
+  console.log = (...args) => logs.push(args.join(' '));
+
+  const fakeResult = makeFakePrintResult({ scoreCurve: undefined });
+  meter.print(fakeResult);
+
+  console.log = origLog;
+  const allOutput = logs.join('\n');
+  assert.ok(!allOutput.includes('점수 곡선'), '점수 곡선 블록이 출력되지 않아야 함');
+});
+
+// FM-GS-1: generateSuggestions() — TOO_HARD 시 파라미터 감소 제안
+test('FM-GS-1: generateSuggestions TOO_HARD higher direction suggests decrease', () => {
+  const result = {
+    zone: 'TOO_HARD', suggestions: [],
+    median: 2, timeoutRate: 0
+  };
+  const param = { name: 'initialSpeed', min: 80, max: 400, currentValue: 300, hardDirection: 'higher' };
+  const suggestions = generateSuggestions(result, param);
+  // 어렵다 → speed를 낮춰야 함 → 감소 제안 포함
+  assert.ok(suggestions.length > 0, '제안이 있어야 함');
+  assert.ok(suggestions.some(s => s.includes('initialSpeed')), '파라미터 이름이 제안에 있어야 함');
+});
+
+// FM-GS-2: generateSuggestions() — TOO_EASY 시 반대 방향 제안
+test('FM-GS-2: generateSuggestions TOO_EASY suggests opposite direction', () => {
+  const result = {
+    zone: 'TOO_EASY', suggestions: [],
+    median: 30, timeoutRate: 0.8
+  };
+  const param = { name: 'botAccuracy', min: 0.05, max: 0.9, currentValue: 0.9, hardDirection: 'lower' };
+  const suggestions = generateSuggestions(result, param);
+  assert.ok(Array.isArray(suggestions), '배열 반환');
+  assert.ok(suggestions.length > 0, '제안이 있어야 함');
+});
+
+// FM-GS-3: generateSuggestions() — param 없으면 기존 suggestions 그대로 반환
+test('FM-GS-3: generateSuggestions returns existing suggestions when no param', () => {
+  const result = { zone: 'FLOW', suggestions: ['기존 제안'], median: 15, timeoutRate: 0.1 };
+  const suggestions = generateSuggestions(result, null);
+  assert.deepEqual(suggestions, ['기존 제안']);
+});
+
+// FM-GS-4: generateSuggestions() — TOO_HARD + lower direction → 증가 제안 (line 679-681 커버)
+test('FM-GS-4: generateSuggestions TOO_HARD lower direction suggests increase', () => {
+  const result = {
+    zone: 'TOO_HARD', suggestions: [],
+    median: 2, timeoutRate: 0
+  };
+  const param = { name: 'botAccuracy', min: 0.05, max: 0.9, currentValue: 0.1, hardDirection: 'lower' };
+  const suggestions = generateSuggestions(result, param);
+  assert.ok(suggestions.length > 0, '제안이 있어야 함');
+  assert.ok(suggestions.some(s => s.includes('botAccuracy')), '파라미터 이름이 제안에 있어야 함');
+});
+
+// FM-GS-5: generateSuggestions() — TOO_EASY + higher direction → 증가 제안 (line 684-685 커버)
+test('FM-GS-5: generateSuggestions TOO_EASY higher direction suggests increase', () => {
+  const result = {
+    zone: 'TOO_EASY', suggestions: [],
+    median: 30, timeoutRate: 0.8
+  };
+  const param = { name: 'initialSpeed', min: 80, max: 400, currentValue: 100, hardDirection: 'higher' };
+  const suggestions = generateSuggestions(result, param);
+  assert.ok(Array.isArray(suggestions), '배열 반환');
+  assert.ok(suggestions.length > 0, '제안이 있어야 함');
+  assert.ok(suggestions.some(s => s.includes('initialSpeed')), '파라미터 이름이 제안에 있어야 함');
+});
+
+// FM-BR-1: runBrowser() — 기본 실행 흐름 (608-655 커버)
+test('FM-BR-1: runBrowser completes basic run cycle', async () => {
+  const meter = new FunMeter({ maxSeconds: 5 });
+  const adapter = createMockBrowserAdapter({ survivalSeconds: 0.1 });
+  const mockBot = { act: () => 'jump', reset: () => {} };
+
+  const result = await meter.runBrowser(adapter, mockBot, {
+    runs: 3, pollInterval: 10, maxSeconds: 0.5
+  });
+
+  assert.ok('zone' in result, 'zone 필드 존재');
+  assert.ok('median' in result, 'median 필드 존재');
+  assert.equal(adapter.initCount, 1, 'init 1회 호출');
+  assert.equal(adapter.closeCount, 1, 'close 1회 호출');
+});
+
+// FM-BR-2: runBrowser() — timeout 처리 (maxSeconds 초과)
+test('FM-BR-2: runBrowser counts timeouts when maxSeconds exceeded', async () => {
+  const meter = new FunMeter({ maxSeconds: 1 });
+  const adapter = createMockBrowserAdapter({ survivalSeconds: 9999 }); // 절대 사망 안 함
+  const mockBot = { act: () => null, reset: () => {} };
+
+  const result = await meter.runBrowser(adapter, mockBot, {
+    runs: 3, pollInterval: 10, maxSeconds: 0.05
+  });
+
+  // 모든 run이 timeout → timeoutRate > 0
+  assert.ok(result.timeoutRate > 0, `timeoutRate가 0보다 커야 함, 실제: ${result.timeoutRate}`);
+});
+
+// FM-PP-1: runParallel() — onProgress 콜백 호출 (552-553 커버)
+test('FM-PP-1: runParallel calls onProgress callback for each run', async () => {
+  const progressEvents = [];
+  const meter = new FunMeter({
+    onProgress: (ev) => progressEvents.push(ev)
+  });
+
+  const gameFile = require.resolve('../games/timing-jump/TimingJumpAdapter');
+  const botFile = require.resolve('../src/bots/RandomBot');
+
+  await meter.runParallel(
+    gameFile, botFile,
+    { initialSpeed: 100 }, { jumpProb: 0.5 },
+    10, 2 // 10 runs, 2 workers
+  );
+
+  assert.ok(progressEvents.length > 0, 'onProgress가 호출되어야 함');
+  assert.ok(progressEvents[0].run >= 1, 'run 번호가 1 이상');
+  assert.equal(progressEvents[0].total, 10, 'total이 10');
 });

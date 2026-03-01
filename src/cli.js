@@ -219,12 +219,15 @@ async function loadGame(gameName, args) {
 }
 
 function parseArgs(argv) {
-  const args = { config: {}, opt: {}, ml: {} };
+  const args = { config: {}, opt: {}, ml: {}, _: [] };
   for (const arg of argv.slice(2)) {
+    if (!arg.startsWith('--')) {
+      args._.push(arg);
+      continue;
+    }
     const eqIdx = arg.indexOf('=');
     const key = eqIdx >= 0 ? arg.slice(0, eqIdx) : arg;
     const val = eqIdx >= 0 ? arg.slice(eqIdx + 1) : true;
-    if (!key.startsWith('--')) continue;
     const name = key.slice(2);
     const parsed = val === true ? true : isNaN(val) ? val : Number(val);
     if (name.startsWith('config.')) {
@@ -411,6 +414,14 @@ async function main() {
   // --help
   if (args.help) printHelp(); // 내부에서 process.exit(0)
   if (args['list-games']) printListGames();
+
+  // init 서브커맨드: funmeter init <name> [--template=...] [--dir=...]
+  if (args._[0] === 'init') {
+    args.init = args._[1] || args.init;
+    const { runInit } = require('./commands/init');
+    await runInit(args);
+    process.exit(0);
+  }
 
   // --view=<gist-id>
   if (args.view) {

@@ -5,6 +5,7 @@ IMPL.md
 
 # Node
 node_modules/
+coverage/
 *.log
 npm-debug.log*
 

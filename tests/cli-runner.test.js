@@ -375,3 +375,227 @@ test('F-4: shareResult 예상치 못한 에러 → 일반 에러 메시지 출�
     assert.ok(errors.some(e => e.includes('예상치 못한 오류') || e.includes('타임아웃')), '일반 에러 메시지 출력 확인');
   });
 });
+
+// ── Group A (추가): makeBot ml.load, flappy-bird 기본 봇 ───────────────────
+
+test('A-3: makeBot ml.load → MLBot.load 호출', async () => {
+  const mlbotPath = path.resolve(__dirname, '../src/bots/MLBot');
+  let loadCalled = false;
+  const fakeInstance = { epsilon: 0 };
+  function FakeMLBot() {}
+  FakeMLBot.load = (_p, _opts) => { loadCalled = true; return fakeInstance; };
+
+  await withModuleStub(mlbotPath, FakeMLBot, async () => {
+    const bot = makeBot(
+      { bot: 'ml', config: {}, opt: {}, ml: { load: 'model.json', epsilon: 0.1 } },
+      'example'
+    );
+    assert.ok(loadCalled, 'MLBot.load가 호출됨');
+    assert.equal(bot, fakeInstance);
+  });
+});
+
+test('A-4: makeBot flappy-bird 기본 봇 → FlappyBirdBot', () => {
+  const FlappyBirdBot = require('../src/bots/FlappyBirdBot');
+  const bot = makeBot({ config: {}, opt: {}, ml: {} }, 'flappy-bird');
+  assert.ok(bot instanceof FlappyBirdBot, 'FlappyBirdBot 인스턴스');
+});
+
+// ── Group B (추가): loadGame 비외부 unknown ────────────────────────────────
+
+test('B-4: loadGame 비외부 unknown → exit(1)', async () => {
+  const code = await mockExit(() =>
+    captureAll(() => loadGame('unknown-game-xyz', {}))
+  );
+  assert.equal(code, 1);
+});
+
+// ── Group C (추가): runOptimize 케이스 ────────────────────────────────────
+
+test('C-1: runOptimize DEFAULT_PARAMS timing-jump → 정상 실행', async () => {
+  const { Optimizer } = require('../src/Optimizer');
+  const TimingJumpAdapter = require('../games/timing-jump/TimingJumpAdapter');
+  const orig = Optimizer.prototype.optimize;
+  Optimizer.prototype.optimize = () => ({ config: {}, result: {}, found: false });
+  try {
+    const args = { ...baseArgs(), bot: 'random', opt: { runs: 2, iter: 1 } };
+    const { logs } = await captureAll(() => runOptimize(args, 'timing-jump', TimingJumpAdapter));
+    assert.ok(logs.some(l => l.includes('timing-jump') || l.includes('최적화')), '최적화 로그 출력');
+  } finally {
+    Optimizer.prototype.optimize = orig;
+  }
+});
+
+test('C-4: runOptimize found=true → 설정 안내 출력', async () => {
+  const { Optimizer } = require('../src/Optimizer');
+  const orig = Optimizer.prototype.optimize;
+  Optimizer.prototype.optimize = () => ({
+    config: { initialSpeed: 120.5678 },
+    result: {},
+    found: true,
+  });
+  try {
+    const args = {
+      ...baseArgs(),
+      bot: 'random',
+      opt: { runs: 2, iter: 1, param: 'initialSpeed', min: 80, max: 200, direction: 'higher' },
+    };
+    const { logs } = await captureAll(() => runOptimize(args, 'example', ExampleGame));
+    assert.ok(logs.some(l => l.includes('이 설정으로')), 'found=true 안내 출력 확인');
+    assert.ok(logs.some(l => l.includes('120.5678')), 'config 값 포함 확인');
+  } finally {
+    Optimizer.prototype.optimize = orig;
+  }
+});
+
+test('C-5: runOptimize botType=human → HumanLikeBot BotClass 경로', async () => {
+  const { Optimizer } = require('../src/Optimizer');
+  const orig = Optimizer.prototype.optimize;
+  Optimizer.prototype.optimize = () => ({ config: {}, result: {}, found: false });
+  try {
+    const args = {
+      ...baseArgs(),
+      bot: 'human',
+      opt: { runs: 2, iter: 1, param: 'initialSpeed', min: 80, max: 200, direction: 'higher' },
+    };
+    const { logs } = await captureAll(() => runOptimize(args, 'example', ExampleGame));
+    assert.ok(logs.some(l => l.includes('human')), 'bot=human 로그 확인');
+  } finally {
+    Optimizer.prototype.optimize = orig;
+  }
+});
+
+test('C-6: runOptimize botType=flappy → FlappyBirdBot BotClass 경로', async () => {
+  const { Optimizer } = require('../src/Optimizer');
+  const orig = Optimizer.prototype.optimize;
+  Optimizer.prototype.optimize = () => ({ config: {}, result: {}, found: false });
+  try {
+    const args = {
+      ...baseArgs(),
+      bot: 'flappy',
+      opt: { runs: 2, iter: 1, param: 'initialSpeed', min: 80, max: 200, direction: 'higher' },
+    };
+    const { logs } = await captureAll(() => runOptimize(args, 'example', ExampleGame));
+    assert.ok(logs.some(l => l.includes('flappy')), 'bot=flappy 로그 확인');
+  } finally {
+    Optimizer.prototype.optimize = orig;
+  }
+});
+
+test('C-7: runOptimize botType=smart → SmartBot BotClass 경로', async () => {
+  const { Optimizer } = require('../src/Optimizer');
+  const orig = Optimizer.prototype.optimize;
+  Optimizer.prototype.optimize = () => ({ config: {}, result: {}, found: false });
+  try {
+    const args = {
+      ...baseArgs(),
+      bot: 'smart',
+      opt: { runs: 2, iter: 1, param: 'initialSpeed', min: 80, max: 200, direction: 'higher' },
+    };
+    const { logs } = await captureAll(() => runOptimize(args, 'example', ExampleGame));
+    assert.ok(logs.some(l => l.includes('smart')), 'bot=smart 로그 확인');
+  } finally {
+    Optimizer.prototype.optimize = orig;
+  }
+});
+
+// ── Group D (추가): --view 에러 처리, --url ────────────────────────────────
+
+test('D-2: runNormal --view GistNotFoundError → exit(1)', async () => {
+  const gistPath = path.resolve(__dirname, '../src/reporters/gistReporter');
+  class FakeGistNotFoundError extends Error {
+    constructor() { super('Gist not found: abc'); }
+  }
+  const stub = {
+    viewGist: async () => { throw new FakeGistNotFoundError(); },
+    GistNotFoundError: FakeGistNotFoundError,
+    GistFormatError:   class extends Error {},
+  };
+  const code = await withModuleStub(gistPath, stub, () =>
+    mockExit(() => captureAll(() =>
+      runNormal({ ...baseArgs(), view: 'abc' }, 'example', ExampleGame)
+    ))
+  );
+  assert.equal(code, 1);
+});
+
+test('D-8: runNormal --view GistFormatError → exit(1)', async () => {
+  const gistPath = path.resolve(__dirname, '../src/reporters/gistReporter');
+  class FakeGistFormatError extends Error {
+    constructor() { super('Invalid gist format'); }
+  }
+  const stub = {
+    viewGist: async () => { throw new FakeGistFormatError(); },
+    GistNotFoundError: class extends Error {},
+    GistFormatError:   FakeGistFormatError,
+  };
+  const code = await withModuleStub(gistPath, stub, () =>
+    mockExit(() => captureAll(() =>
+      runNormal({ ...baseArgs(), view: 'abc' }, 'example', ExampleGame)
+    ))
+  );
+  assert.equal(code, 1);
+});
+
+test('D-9: runNormal --view 일반 에러 → exit(1) 조회 실패', async () => {
+  const gistPath = path.resolve(__dirname, '../src/reporters/gistReporter');
+  const stub = {
+    viewGist: async () => { throw new Error('network timeout'); },
+    GistNotFoundError: class extends Error {},
+    GistFormatError:   class extends Error {},
+  };
+  let capturedErrors = [];
+  const origErr = console.error;
+  console.error = (...a) => capturedErrors.push(a.map(String).join(' '));
+  const code = await withModuleStub(gistPath, stub, () =>
+    mockExit(() => runNormal({ ...baseArgs(), view: 'abc' }, 'example', ExampleGame))
+  ).finally(() => { console.error = origErr; });
+  assert.equal(code, 1);
+  assert.ok(capturedErrors.some(e => e.includes('조회 실패')), '조회 실패 메시지 출력');
+});
+
+test('D-url: runNormal --url Playwright 미설치 → exit(1)', async () => {
+  const code = await mockExit(() =>
+    captureAll(() =>
+      runNormal({ ...baseArgs(), url: 'http://example.com' }, 'example', ExampleGame)
+    )
+  );
+  assert.equal(code, 1);
+});
+
+// ── Group E (추가): 병렬 실행, share ──────────────────────────────────────
+
+test('E-8: runNormal --parallel=2 example(random) → 병렬 실행', async () => {
+  const { logs } = await captureAll(() =>
+    runNormal(
+      { ...baseArgs({ runs: 4, parallel: 2 }), bot: 'random' },
+      'example', ExampleGame
+    )
+  );
+  assert.ok(logs.some(l => l.includes('병렬')), '병렬 실행 로그 확인');
+});
+
+test('E-9: runNormal --parallel=2 human bot → HumanLikeBot 경로', async () => {
+  const { logs } = await captureAll(() =>
+    runNormal(
+      { ...baseArgs({ runs: 4, parallel: 2 }), bot: 'human' },
+      'example', ExampleGame
+    )
+  );
+  assert.ok(logs.some(l => l.includes('병렬')), '병렬 실행 로그 확인');
+});
+
+test('E-share: runNormal share=true → shareResult 호출 → gist URL 출력', async () => {
+  const gistPath = path.resolve(__dirname, '../src/reporters/gistReporter');
+  const stub = {
+    uploadGist: async () => ({ url: 'https://gist.github.com/test123', id: 'test123' }),
+    GistAuthError:   class extends Error {},
+    GistUploadError: class extends Error {},
+  };
+  await withModuleStub(gistPath, stub, async () => {
+    const { logs } = await captureAll(() =>
+      runNormal({ ...baseArgs({ runs: 3 }), share: true }, 'example', ExampleGame)
+    );
+    assert.ok(logs.some(l => l.includes('gist.github.com')), 'Gist URL 출력 확인');
+  });
+});

@@ -271,6 +271,25 @@ async function main() {
           `  ${date}  ${(name || '?').padEnd(14)}  ${(zone || '?').padEnd(10)}  중앙값: ${median != null ? median.toFixed(1) + 's' : '?'}`
         );
       }
+      if (entries.length >= 2) {
+        const prev = entries[1].result; // 이전 실행 (index 1 = 두 번째 최신)
+        const curr = entries[0].result; // 최신 실행 (index 0)
+        if (prev && curr) {
+          const mDiff  = curr.median - prev.median;
+          const tDiff  = (curr.timeoutRate - prev.timeoutRate) * 100;
+          const mSign  = mDiff >= 0 ? '+' : '';
+          const tSign  = tDiff >= 0 ? '+' : '';
+          const mArrow = mDiff > 0 ? '▲' : mDiff < 0 ? '▼' : '─';
+          const tArrow = tDiff < 0 ? '▼' : tDiff > 0 ? '▲' : '─';
+          console.log('\n이전 실행 대비 변화:');
+          console.log(`  중앙값:   ${prev.median.toFixed(1)}s → ${curr.median.toFixed(1)}s  (${mSign}${mDiff.toFixed(1)}s ${mArrow})`);
+          if (prev.zone !== curr.zone) {
+            const zoneEmoji = { FLOW: '✅', TOO_HARD: '😵', TOO_EASY: '😴' }[curr.zone] ?? '';
+            console.log(`  Zone:     ${prev.zone} → ${curr.zone} ${zoneEmoji}`);
+          }
+          console.log(`  타임아웃: ${(prev.timeoutRate * 100).toFixed(0)}% → ${(curr.timeoutRate * 100).toFixed(0)}%  (${tSign}${tDiff.toFixed(0)}%p ${tArrow})`);
+        }
+      }
     }
     console.log('');
     process.exit(0);

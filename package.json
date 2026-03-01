@@ -1,6 +1,6 @@
 {
   "name": "radar_fun_meter",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "description": "Flow Theory 기반 게임 재미 측정 도구 — 봇이 게임을 N번 플레이해서 FLOW Zone 자동 판정",
   "main": "src/index.js",
   "types": "src/index.d.ts",
